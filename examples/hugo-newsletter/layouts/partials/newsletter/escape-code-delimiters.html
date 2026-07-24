@@ -1,0 +1,18 @@
+{{- $html := . -}}
+{{- $codePatterns := slice
+  `(?is)(<pre\b[^>]*>)(.*?)(</pre>)`
+  `(?is)(<code\b[^>]*>)(.*?)(</code>)`
+-}}
+
+{{- range $pattern := $codePatterns -}}
+  {{- range (findRESubmatch $pattern $html) -}}
+    {{- $oldElement := index . 0 -}}
+    {{- /* Escape displayed code only, leaving the element markup untouched. */ -}}
+    {{- $escapedCode := replace (index . 2) "{{" "&#123;&#123;" -}}
+    {{- $escapedCode = replace $escapedCode "}}" "&#125;&#125;" -}}
+    {{- $newElement := printf "%s%s%s" (index . 1) $escapedCode (index . 3) -}}
+    {{- $html = replace $html $oldElement $newElement -}}
+  {{- end -}}
+{{- end -}}
+
+{{- return $html -}}

@@ -1,0 +1,17 @@
+# Replace this example origin with the canonical URL of your Hugo site.
+baseURL = "https://blog.example.com/"
+title = "Hugo newsletter example"
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+
+[outputFormats.Newsletter]
+  mediaType = "application/json"
+  baseName = "newsletter"
+  isPlainText = true
+  notAlternative = true
+
+[outputs]
+  home = ["HTML", "RSS", "JSON", "Newsletter"]

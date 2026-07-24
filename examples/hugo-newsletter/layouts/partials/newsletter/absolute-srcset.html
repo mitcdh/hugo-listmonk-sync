@@ -1,0 +1,30 @@
+{{- $page := .page -}}
+{{- $srcset := .srcset -}}
+{{- $trimmedSrcset := strings.TrimSpace $srcset -}}
+{{- $result := $srcset -}}
+
+{{- if ne $trimmedSrcset "" -}}
+  {{- /* Split at candidate boundaries without splitting the comma inside data URLs. */ -}}
+  {{- $separator := "__HUGO_NEWSLETTER_SRCSET_CANDIDATE__" -}}
+  {{- $separatedSrcset := replaceRE `,\s+` $separator $srcset -}}
+  {{- $separatedSrcset = replaceRE `([0-9]+(?:\.[0-9]+)?[wx]),` (printf "${1}%s" $separator) $separatedSrcset -}}
+  {{- $candidates := slice -}}
+  {{- range (split $separatedSrcset $separator) -}}
+    {{- $candidate := strings.TrimSpace . -}}
+    {{- if ne $candidate "" -}}
+      {{- $parts := findRESubmatch `^(\S+)(\s+.*)?$` $candidate 1 -}}
+      {{- if gt (len $parts) 0 -}}
+        {{- $match := index $parts 0 -}}
+        {{- $url := index $match 1 -}}
+        {{- $descriptor := index $match 2 -}}
+        {{- $absoluteURL := partial "newsletter/absolute-url.html" (dict "page" $page "url" $url) -}}
+        {{- $candidates = $candidates | append (printf "%s%s" $absoluteURL $descriptor) -}}
+      {{- else -}}
+        {{- $candidates = $candidates | append $candidate -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $result = delimit $candidates ", " -}}
+{{- end -}}
+
+{{- return $result -}}

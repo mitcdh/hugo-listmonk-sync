@@ -1,6 +1,71 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-{{ $baseURL := "https://blog.mitcdh.au" }}
-{{ $postURL := printf "%s/posts/%s/" $baseURL .Campaign.Name }}
+{{- /*
+===============================================================================
+TEMPLATE SETTINGS
+Edit the values in this section to customise the template.
+===============================================================================
+*/ -}}
+
+{{- /* Site and publisher. URLs should not end with a slash. */ -}}
+{{ $language := "en" }}
+{{ $baseURL := "https://blog.example.com" }}
+{{ $assetBaseURL := $baseURL }}
+{{ $postPath := "/posts" }}
+{{ $siteName := "Example Blog" }}
+{{ $siteTagline := "Updates from our latest posts." }}
+{{ $publisherName := "Your Name" }}
+{{ $postalAddress := "Your postal address" }}
+{{ $logoPath := "/favicon-96x96.png" }}
+{{ $logoAlt := "Example Blog logo" }}
+
+{{- /* Content options */ -}}
+{{ $showReadPostButton := false }}
+
+{{- /* Email copy */ -}}
+{{ $preheaderPrefix := "New post from" }}
+{{ $headerKicker := "New blog post" }}
+{{ $viewOnlineText := "View online" }}
+{{ $readPostText := "Read the full post" }}
+{{ $visitBlogText := "Visit the blog" }}
+{{ $publishedByText := "Published by" }}
+{{ $ctaArrow := "→" }}
+{{ $metadataSeparator := "·" }}
+{{ $footerLinkSeparator := "•" }}
+
+{{- /* Date parsing and display */ -}}
+{{ $dateInputLayout := "2006-01-02T15:04:05Z07:00" }}
+{{ $dateDisplayLayout := "2 January 2006" }}
+
+{{- /* Fonts */ -}}
+{{- /*
+Font names are separate values so Go's HTML/CSS escaping can safely insert
+these values into both style blocks and inline styles.
+*/ -}}
+{{ $headingFont := "Inter" }}
+{{ $bodyFont := "Atkinson Hyperlegible Next" }}
+{{ $uiFont := "Segoe UI" }}
+{{ $headingFallbackFont := "Helvetica Neue" }}
+{{ $helveticaFont := "Helvetica" }}
+{{ $arialFont := "Arial" }}
+{{ $sansSerif := "sans-serif" }}
+{{ $monoFont := "Consolas" }}
+{{ $monoFallbackFont := "Monaco" }}
+{{ $monoWindowsFont := "Courier New" }}
+{{ $monospace := "monospace" }}
+{{ $outlookFont := "Arial" }}
+
+{{- /* Layout */ -}}
+{{ $mobileBreakpoint := 680 }}
+{{ $emailWidth := 640 }}
+{{ $titleMaxWidth := 610 }}
+{{ $copyMaxWidth := 600 }}
+{{ $logoColumnWidth := 50 }}
+{{ $logoSize := 42 }}
+{{ $imageRadius := 18 }}
+{{ $mobileImageRadius := 12 }}
+{{ $buttonRadius := 8 }}
+{{ $inlineCodeRadius := 5 }}
+{{ $codeBlockRadius := 12 }}
 
 {{- /* Brand palette */ -}}
 {{ $brand := "#aa55ff" }}
@@ -26,6 +91,13 @@
 {{ $darkHeading := "#fafafa" }}
 {{ $darkBodyText := "#cdcdce" }}
 
+{{- /* Derived values: normally no editing is required below this point. */ -}}
+{{ $homeURL := printf "%s/" $baseURL }}
+{{ $postURL := printf "%s%s/%s/" $baseURL $postPath .Campaign.Name }}
+{{ with .Campaign.Attribs.post.url }}{{ $postURL = . }}{{ end }}
+{{ $logoURL := printf "%s%s" $assetBaseURL $logoPath }}
+{{ $visitSiteAriaLabel := printf "%s: %s" $visitBlogText $siteName }}
+
 {{- /*
 Campaign Attributes example:
 {
@@ -34,13 +106,14 @@ Campaign Attributes example:
     "date": "2026-07-18T00:00:00+10:00",
     "description": "Post description",
     "image": "/images/example.webp",
-    "readingTime": "12 min read"
+    "readingTime": "12 min read",
+    "url": "https://blog.example.com/posts/example/"
   }
 }
 */ -}}
-<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="{{ $language }}">
 <head>
-    <title>{{ .Campaign.Subject }}</title>
+    <title>{{ with .Campaign.Attribs.post.title }}{{ . }}{{ else }}{{ $.Campaign.Subject }}{{ end }}</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
@@ -97,16 +170,16 @@ Campaign Attributes example:
 
         .header-description {
             color: {{ $bodyText }};
-            font-family: "Atkinson Hyperlegible Next", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-family: "{{ $bodyFont }}", "{{ $uiFont }}", "{{ $helveticaFont }}", "{{ $arialFont }}", {{ $sansSerif }};
             font-size: 19px;
             line-height: 30px;
             margin: 16px 0 0;
-            max-width: 600px;
+            max-width: {{ $copyMaxWidth }}px;
         }
 
         .post-byline {
             color: {{ $mutedText }};
-            font-family: Inter, "Helvetica Neue", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-family: "{{ $headingFont }}", "{{ $headingFallbackFont }}", "{{ $uiFont }}", "{{ $helveticaFont }}", "{{ $arialFont }}", {{ $sansSerif }};
             font-size: 13px;
             font-weight: 600;
             line-height: 20px;
@@ -116,17 +189,17 @@ Campaign Attributes example:
         .post-cover {
             display: block;
             width: 100%;
-            max-width: 640px;
+            max-width: {{ $emailWidth }}px;
             height: auto;
-            border-radius: 18px;
+            border-radius: {{ $imageRadius }}px;
         }
 
         .content a.post-button {
             color: {{ $buttonText }};
             background-color: {{ $brand }};
-            border-radius: 8px;
+            border-radius: {{ $buttonRadius }}px;
             display: inline-block;
-            font-family: "Atkinson Hyperlegible Next", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-family: "{{ $bodyFont }}", "{{ $uiFont }}", "{{ $helveticaFont }}", "{{ $arialFont }}", {{ $sansSerif }};
             font-size: 15px;
             font-weight: 700;
             line-height: 19px;
@@ -144,7 +217,7 @@ Campaign Attributes example:
         .content h3,
         .content h4 {
             color: {{ $ink }};
-            font-family: Inter, "Helvetica Neue", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-family: "{{ $headingFont }}", "{{ $headingFallbackFont }}", "{{ $uiFont }}", "{{ $helveticaFont }}", "{{ $arialFont }}", {{ $sansSerif }};
             font-weight: 700;
             letter-spacing: -0.8px;
             margin: 0;
@@ -183,7 +256,7 @@ Campaign Attributes example:
         .campaign-content td,
         .campaign-content th {
             color: {{ $bodyText }};
-            font-family: "Atkinson Hyperlegible Next", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-family: "{{ $bodyFont }}", "{{ $uiFont }}", "{{ $helveticaFont }}", "{{ $arialFont }}", {{ $sansSerif }};
             font-size: 17px;
             line-height: 29px;
         }
@@ -217,7 +290,7 @@ Campaign Attributes example:
             max-width: 100%;
             height: auto;
             margin: 28px 0 10px;
-            border-radius: 18px;
+            border-radius: {{ $imageRadius }}px;
         }
 
         .content blockquote {
@@ -266,8 +339,8 @@ Campaign Attributes example:
             color: {{ $codeText }};
             background-color: {{ $white }};
             border: 1px solid {{ $codeBorder }};
-            border-radius: 5px;
-            font-family: Consolas, Monaco, "Courier New", monospace;
+            border-radius: {{ $inlineCodeRadius }}px;
+            font-family: "{{ $monoFont }}", "{{ $monoFallbackFont }}", "{{ $monoWindowsFont }}", {{ $monospace }};
             font-size: 14px;
             padding: 2px 5px;
         }
@@ -276,8 +349,8 @@ Campaign Attributes example:
             color: {{ $codeText }};
             background-color: {{ $white }};
             border: 1px solid {{ $codeBorder }};
-            border-radius: 12px;
-            font-family: Consolas, Monaco, "Courier New", monospace;
+            border-radius: {{ $codeBlockRadius }}px;
+            font-family: "{{ $monoFont }}", "{{ $monoFallbackFont }}", "{{ $monoWindowsFont }}", {{ $monospace }};
             font-size: 13px;
             line-height: 21px;
             margin: 26px 0;
@@ -292,7 +365,7 @@ Campaign Attributes example:
             padding: 0;
         }
 
-        @media screen and (max-width: 680px) {
+        @media screen and (max-width: {{ $mobileBreakpoint }}px) {
             .email-width {
                 width: 100% !important;
             }
@@ -330,7 +403,7 @@ Campaign Attributes example:
             }
 
             .post-cover {
-                border-radius: 12px !important;
+                border-radius: {{ $mobileImageRadius }}px !important;
             }
 
             .content h1 {
@@ -497,33 +570,33 @@ Campaign Attributes example:
 
     <!--[if mso]>
     <style type="text/css">
-        body, table, td, a { font-family: Arial, sans-serif !important; }
+        body, table, td, a { font-family: "{{ $outlookFont }}", {{ $sansSerif }} !important; }
     </style>
     <![endif]-->
 </head>
 
-<body class="content-bg" style="width: 100%; margin: 0; padding: 0; background-color: {{ $canvas }}; color: {{ $ink }}; font-family: 'Atkinson Hyperlegible Next', 'Segoe UI', Helvetica, Arial, sans-serif;">
+<body class="content-bg" style="width: 100%; margin: 0; padding: 0; background-color: {{ $canvas }}; color: {{ $ink }}; font-family: '{{ $bodyFont }}', '{{ $uiFont }}', '{{ $helveticaFont }}', '{{ $arialFont }}', {{ $sansSerif }};">
     <div class="preheader">
-        {{ with .Campaign.Attribs.post.description }}{{ . }}{{ else }}New post from Mitchell Hewes &mdash; {{ .Campaign.Subject }}{{ end }}
+        {{ with .Campaign.Attribs.post.description }}{{ . }}{{ else }}{{ $preheaderPrefix }} {{ $publisherName }} &mdash; {{ with .Campaign.Attribs.post.title }}{{ . }}{{ else }}{{ $.Campaign.Subject }}{{ end }}{{ end }}
         &#847;&zwnj;&nbsp;&#8199;&#65279;&#847;&zwnj;&nbsp;&#8199;&#65279;&#847;&zwnj;&nbsp;&#8199;&#65279;
     </div>
 
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
         <tr>
             <td class="header-bg header-pad" align="center" bgcolor="{{ $white }}" style="background-color: {{ $white }}; padding: 26px 24px 46px;">
-                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="width: 640px; max-width: 640px;">
+                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="{{ $emailWidth }}" style="width: {{ $emailWidth }}px; max-width: {{ $emailWidth }}px;">
                     <tr>
-                        <td width="50" valign="middle" style="width: 50px; padding: 0;">
-                            <a href="{{ $baseURL }}/" aria-label="Visit blog.mitcdh">
-                                <img src="{{ $baseURL }}/favicon-96x96.png" width="42" height="42" alt="&gt;&gt;" style="display: block; width: 42px; height: 42px;" />
+                        <td width="{{ $logoColumnWidth }}" valign="middle" style="width: {{ $logoColumnWidth }}px; padding: 0;">
+                            <a href="{{ $homeURL }}" aria-label="{{ $visitSiteAriaLabel }}">
+                                <img src="{{ $logoURL }}" width="{{ $logoSize }}" height="{{ $logoSize }}" alt="{{ $logoAlt }}" style="display: block; width: {{ $logoSize }}px; height: {{ $logoSize }}px;" />
                             </a>
                         </td>
                         <td valign="middle" style="padding: 0 12px;">
-                            <a href="{{ $baseURL }}/" class="brand-name" style="display: block; color: {{ $ink }}; font-family: Inter, 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 19px; font-weight: 700; line-height: 23px; letter-spacing: -0.5px; text-decoration: none;">mitcdh.au</a>
-                            <span class="brand-tagline" style="display: block; color: {{ $bodyText }}; font-size: 12px; line-height: 17px;">Securer of Computers and Neutrons.</span>
+                            <a href="{{ $homeURL }}" class="brand-name" style="display: block; color: {{ $ink }}; font-family: '{{ $headingFont }}', '{{ $headingFallbackFont }}', '{{ $uiFont }}', '{{ $helveticaFont }}', '{{ $arialFont }}', {{ $sansSerif }}; font-size: 19px; font-weight: 700; line-height: 23px; letter-spacing: -0.5px; text-decoration: none;">{{ $siteName }}</a>
+                            <span class="brand-tagline" style="display: block; color: {{ $bodyText }}; font-size: 12px; line-height: 17px;">{{ $siteTagline }}</span>
                         </td>
                         <td align="right" valign="middle" style="padding: 0;">
-                            <a href="{{ MessageURL }}" class="view-online" style="color: {{ $ink }}; font-size: 13px; font-weight: 700; line-height: 18px; text-decoration: underline; text-underline-offset: 2px;">View online</a>
+                            <a href="{{ MessageURL }}" class="view-online" style="color: {{ $ink }}; font-size: 13px; font-weight: 700; line-height: 18px; text-decoration: underline; text-underline-offset: 2px;">{{ $viewOnlineText }}</a>
                         </td>
                     </tr>
                     <tr>
@@ -531,13 +604,13 @@ Campaign Attributes example:
                     </tr>
                     <tr>
                         <td colspan="3" style="padding: 24px 0 0;">
-                            <div class="header-kicker" style="margin: 0 0 12px; color: {{ $mutedText }}; font-family: Inter, 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 700; line-height: 16px; letter-spacing: 1px; text-transform: uppercase;">New blog post</div>
-                            <h1 class="header-title" style="max-width: 610px; margin: 0; color: {{ $ink }}; font-family: Inter, 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 42px; font-weight: 700; line-height: 50px; letter-spacing: -1.6px;">{{ with .Campaign.Attribs.post.title }}{{ . }}{{ else }}{{ $.Campaign.Subject }}{{ end }}</h1>
+                            <div class="header-kicker" style="margin: 0 0 12px; color: {{ $mutedText }}; font-family: '{{ $headingFont }}', '{{ $headingFallbackFont }}', '{{ $uiFont }}', '{{ $helveticaFont }}', '{{ $arialFont }}', {{ $sansSerif }}; font-size: 12px; font-weight: 700; line-height: 16px; letter-spacing: 1px; text-transform: uppercase;">{{ $headerKicker }}</div>
+                            <h1 class="header-title" style="max-width: {{ $titleMaxWidth }}px; margin: 0; color: {{ $ink }}; font-family: '{{ $headingFont }}', '{{ $headingFallbackFont }}', '{{ $uiFont }}', '{{ $helveticaFont }}', '{{ $arialFont }}', {{ $sansSerif }}; font-size: 42px; font-weight: 700; line-height: 50px; letter-spacing: -1.6px;">{{ with .Campaign.Attribs.post.title }}{{ . }}{{ else }}{{ $.Campaign.Subject }}{{ end }}</h1>
                             {{ with .Campaign.Attribs.post.description }}
-                            <p class="header-description" style="max-width: 600px; margin: 16px 0 0; color: {{ $bodyText }}; font-family: 'Atkinson Hyperlegible Next', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 19px; line-height: 30px;">{{ . }}</p>
+                            <p class="header-description" style="max-width: {{ $copyMaxWidth }}px; margin: 16px 0 0; color: {{ $bodyText }}; font-family: '{{ $bodyFont }}', '{{ $uiFont }}', '{{ $helveticaFont }}', '{{ $arialFont }}', {{ $sansSerif }}; font-size: 19px; line-height: 30px;">{{ . }}</p>
                             {{ end }}
                             {{ with .Campaign.Attribs.post }}
-                            <p class="post-byline" style="margin: 15px 0 0; color: {{ $mutedText }}; font-family: Inter, 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; font-weight: 600; line-height: 20px;">Mitchell Hewes{{ with .date }}&nbsp;&nbsp;&middot;&nbsp;&nbsp;{{ toDate "2006-01-02T15:04:05Z07:00" . | date "2 January 2006" }}{{ end }}{{ with .readingTime }}&nbsp;&nbsp;&middot;&nbsp;&nbsp;{{ . }}{{ end }}</p>
+                            <p class="post-byline" style="margin: 15px 0 0; color: {{ $mutedText }}; font-family: '{{ $headingFont }}', '{{ $headingFallbackFont }}', '{{ $uiFont }}', '{{ $helveticaFont }}', '{{ $arialFont }}', {{ $sansSerif }}; font-size: 13px; font-weight: 600; line-height: 20px;">{{ $publisherName }}{{ with .date }}&nbsp;&nbsp;{{ $metadataSeparator }}&nbsp;&nbsp;{{ toDate $dateInputLayout . | date $dateDisplayLayout }}{{ end }}{{ with .readingTime }}&nbsp;&nbsp;{{ $metadataSeparator }}&nbsp;&nbsp;{{ . }}{{ end }}</p>
                             {{ end }}
                         </td>
                     </tr>
@@ -548,28 +621,30 @@ Campaign Attributes example:
         <tr>
             <td class="content-bg" align="center" bgcolor="{{ $canvas }}" style="background-color: {{ $canvas }};">
                 <!--[if mso]>
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="640"><tr><td>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="{{ $emailWidth }}"><tr><td>
                 <![endif]-->
-                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="width: 640px; max-width: 640px;">
+                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="{{ $emailWidth }}" style="width: {{ $emailWidth }}px; max-width: {{ $emailWidth }}px;">
                     <tr>
                         <td class="content content-pad" style="padding: 46px 0 32px;">
                             {{ with .Campaign.Attribs.post }}
                             {{ if .image }}
                             <a href="{{ $postURL }}" style="display: block; text-decoration: none;">
-                                <img class="post-cover" src="{{ $baseURL }}{{ .image }}" width="640" alt="{{ with .title }}{{ . }}{{ else }}{{ $.Campaign.Subject }}{{ end }}" style="display: block; width: 100%; max-width: 640px; height: auto; margin: 0; border-radius: 18px;" />
+                                <img class="post-cover" src="{{ $assetBaseURL }}{{ .image }}" width="{{ $emailWidth }}" alt="{{ with .title }}{{ . }}{{ else }}{{ $.Campaign.Subject }}{{ end }}" style="display: block; width: 100%; max-width: {{ $emailWidth }}px; height: auto; margin: 0; border-radius: {{ $imageRadius }}px;" />
                             </a>
                             {{ end }}
                             {{ end }}
 
                             <div class="campaign-content" style="margin-top: 30px;">{{ template "content" . }}</div>
 
+                            {{ if $showReadPostButton }}
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border: 0; margin: 30px 0 0;">
                                 <tr>
                                     <td style="border: 0; padding: 0;">
-                                        <a href="{{ $postURL }}" class="post-button" style="display: inline-block; color: {{ $buttonText }}; background-color: {{ $brand }}; border-radius: 8px; font-family: 'Atkinson Hyperlegible Next', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; line-height: 19px; padding: 13px 17px; text-decoration: none;">Read the full post&nbsp;&nbsp;&rarr;</a>
+                                        <a href="{{ $postURL }}" class="post-button" style="display: inline-block; color: {{ $buttonText }}; background-color: {{ $brand }}; border-radius: {{ $buttonRadius }}px; font-family: '{{ $bodyFont }}', '{{ $uiFont }}', '{{ $helveticaFont }}', '{{ $arialFont }}', {{ $sansSerif }}; font-size: 15px; font-weight: 700; line-height: 19px; padding: 13px 17px; text-decoration: none;">{{ $readPostText }}&nbsp;&nbsp;{{ $ctaArrow }}</a>
                                     </td>
                                 </tr>
                             </table>
+                            {{ end }}
                         </td>
                     </tr>
                 </table>
@@ -581,19 +656,19 @@ Campaign Attributes example:
 
         <tr>
             <td class="footer-bg footer-pad" align="center" bgcolor="{{ $white }}" style="background-color: {{ $white }}; padding: 32px 24px 38px;">
-                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="width: 640px; max-width: 640px;">
+                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="{{ $emailWidth }}" style="width: {{ $emailWidth }}px; max-width: {{ $emailWidth }}px;">
                     <tr>
                         <td class="footer-copy" align="left" valign="top">
-                            <p class="footer-strong" style="margin: 0 0 6px; color: {{ $ink }}; font-size: 13px; font-weight: 700; line-height: 20px;">Published by Mitchell Hewes</p>
-                            <p class="footer-text" style="margin: 0 0 14px; color: {{ $bodyText }}; font-size: 12px; line-height: 19px;">PO Box 829, Sutherland NSW 1499, Australia</p>
+                            <p class="footer-strong" style="margin: 0 0 6px; color: {{ $ink }}; font-size: 13px; font-weight: 700; line-height: 20px;">{{ $publishedByText }} {{ $publisherName }}</p>
+                            <p class="footer-text" style="margin: 0 0 14px; color: {{ $bodyText }}; font-size: 12px; line-height: 19px;">{{ $postalAddress }}</p>
                             <p style="margin: 0; color: {{ $bodyText }}; font-size: 12px; line-height: 20px;">
                                 <a href="{{ UnsubscribeURL }}" class="footer-link" style="color: {{ $bodyText }}; text-decoration: underline; text-underline-offset: 2px;">{{ L.T "email.unsub" }}</a>
-                                <span aria-hidden="true" style="color: {{ $mutedText }}; padding: 0 8px;">&bull;</span>
+                                <span aria-hidden="true" style="color: {{ $mutedText }}; padding: 0 8px;">{{ $footerLinkSeparator }}</span>
                                 <a href="{{ MessageURL }}" class="footer-link" style="color: {{ $bodyText }}; text-decoration: underline; text-underline-offset: 2px;">{{ L.T "email.viewInBrowser" }}</a>
                             </p>
                         </td>
                         <td class="footer-cta" align="right" valign="top" style="padding-left: 20px;">
-                            <a href="{{ $baseURL }}/" class="footer-button" style="display: inline-block; color: {{ $buttonText }}; background-color: {{ $brand }}; border-radius: 8px; font-size: 14px; font-weight: 700; line-height: 18px; padding: 12px 16px; text-decoration: none;">Visit the blog&nbsp;&nbsp;&rarr;</a>
+                            <a href="{{ $homeURL }}" class="footer-button" style="display: inline-block; color: {{ $buttonText }}; background-color: {{ $brand }}; border-radius: {{ $buttonRadius }}px; font-size: 14px; font-weight: 700; line-height: 18px; padding: 12px 16px; text-decoration: none;">{{ $visitBlogText }}&nbsp;&nbsp;{{ $ctaArrow }}</a>
                         </td>
                     </tr>
                 </table>

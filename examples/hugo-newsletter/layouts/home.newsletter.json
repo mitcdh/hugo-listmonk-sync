@@ -1,0 +1,31 @@
+{{- $posts := slice -}}
+{{- $pages := where .Site.RegularPages "Section" "posts" -}}
+{{- $pages = where $pages "Params.newsletter" true -}}
+
+{{- range $pages -}}
+  {{- $key := path.Base (strings.TrimSuffix "/" .RelPermalink) -}}
+  {{- $html := string .Content -}}
+  {{- $html = partial "newsletter/absolute-urls.html" (dict "page" . "html" $html) -}}
+  {{- $html = partial "newsletter/escape-code-delimiters.html" $html -}}
+
+  {{- $post := dict
+    "key"         $key
+    "url"         .Permalink
+    "title"       .Title
+    "description" .Description
+    "date"        (.Date.Format "2006-01-02T15:04:05Z07:00")
+    "readingTime" .ReadingTime
+    "image"       (.Params.image | default "")
+    "tags"        (.Params.tags | default slice)
+    "html"        $html
+    "text"        (.Plain | htmlUnescape)
+  -}}
+
+  {{- $posts = $posts | append $post -}}
+{{- end -}}
+
+{{- dict
+  "schemaVersion" 1
+  "posts" $posts
+  | jsonify (dict "indent" "  ")
+-}}

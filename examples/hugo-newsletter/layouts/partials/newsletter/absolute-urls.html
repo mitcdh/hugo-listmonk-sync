@@ -1,0 +1,57 @@
+{{- $page := .page -}}
+{{- $html := .html -}}
+{{- /* Post-process final HTML so raw HTML and shortcode output are covered too. */ -}}
+{{- $attributes := slice
+  (dict "tag" "img" "name" "src")
+  (dict "tag" "img" "name" "srcset")
+  (dict "tag" "source" "name" "src")
+  (dict "tag" "source" "name" "srcset")
+  (dict "tag" "a" "name" "href")
+  (dict "tag" "video" "name" "poster")
+-}}
+
+{{- range $attribute := $attributes -}}
+  {{- $doubleQuotedPattern := printf `(?is)(<%s\b[^>]*?\s+%s\s*=\s*")([^"]*)(")` $attribute.tag $attribute.name -}}
+  {{- range (findRESubmatch $doubleQuotedPattern $html) -}}
+    {{- $oldAttribute := index . 0 -}}
+    {{- $value := index . 2 -}}
+    {{- $absoluteValue := "" -}}
+    {{- if eq $attribute.name "srcset" -}}
+      {{- $absoluteValue = partial "newsletter/absolute-srcset.html" (dict "page" $page "srcset" $value) -}}
+    {{- else -}}
+      {{- $absoluteValue = partial "newsletter/absolute-url.html" (dict "page" $page "url" $value) -}}
+    {{- end -}}
+    {{- $newAttribute := printf "%s%s%s" (index . 1) $absoluteValue (index . 3) -}}
+    {{- $html = replace $html $oldAttribute $newAttribute -}}
+  {{- end -}}
+
+  {{- $singleQuotedPattern := printf `(?is)(<%s\b[^>]*?\s+%s\s*=\s*')([^']*)(')` $attribute.tag $attribute.name -}}
+  {{- range (findRESubmatch $singleQuotedPattern $html) -}}
+    {{- $oldAttribute := index . 0 -}}
+    {{- $value := index . 2 -}}
+    {{- $absoluteValue := "" -}}
+    {{- if eq $attribute.name "srcset" -}}
+      {{- $absoluteValue = partial "newsletter/absolute-srcset.html" (dict "page" $page "srcset" $value) -}}
+    {{- else -}}
+      {{- $absoluteValue = partial "newsletter/absolute-url.html" (dict "page" $page "url" $value) -}}
+    {{- end -}}
+    {{- $newAttribute := printf "%s%s%s" (index . 1) $absoluteValue (index . 3) -}}
+    {{- $html = replace $html $oldAttribute $newAttribute -}}
+  {{- end -}}
+
+  {{- $unquotedPattern := printf `(?is)(<%s\b[^>]*?\s+%s\s*=\s*)([^\s"'<>]+)` $attribute.tag $attribute.name -}}
+  {{- range (findRESubmatch $unquotedPattern $html) -}}
+    {{- $oldAttribute := index . 0 -}}
+    {{- $value := index . 2 -}}
+    {{- $absoluteValue := "" -}}
+    {{- if eq $attribute.name "srcset" -}}
+      {{- $absoluteValue = partial "newsletter/absolute-srcset.html" (dict "page" $page "srcset" $value) -}}
+    {{- else -}}
+      {{- $absoluteValue = partial "newsletter/absolute-url.html" (dict "page" $page "url" $value) -}}
+    {{- end -}}
+    {{- $newAttribute := printf "%s%s" (index . 1) $absoluteValue -}}
+    {{- $html = replace $html $oldAttribute $newAttribute -}}
+  {{- end -}}
+{{- end -}}
+
+{{- return $html -}}

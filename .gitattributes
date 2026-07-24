@@ -1,0 +1,2 @@
+# The campaign template is stored with CRLF line endings for email-template use.
+blog-updates.gohtml whitespace=cr-at-eol

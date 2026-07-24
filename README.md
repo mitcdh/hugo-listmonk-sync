@@ -1,57 +1,200 @@
-# Hugo to Listmonk campaign synchronizer
+# hugo-listmonk-sync
 
-A small, standalone Python 3.13 service that polls a Hugo newsletter JSON feed
-and reconciles its posts with Listmonk campaigns. It creates missing campaigns
-as drafts, refreshes matching drafts, and treats every non-draft campaign as
-immutable.
+`hugo-listmonk-sync` turns selected Hugo posts into Listmonk draft campaigns.
+It polls a versioned JSON feed, validates the complete response, and creates or
+refreshes matching drafts without changing campaigns that have left draft
+status.
 
-The service targets Listmonk 6.0 or later. Campaign-level `attribs` were added
-in Listmonk 6.0 and are used to expose Hugo post metadata to campaign
-templates.
+The service is deliberately limited:
 
-## Safety model
+- It creates missing campaigns as drafts.
+- It updates the subject, body, and post metadata of matching drafts.
+- It never sends, schedules, archives, deletes, or recreates campaigns.
+- It leaves sent and otherwise non-draft campaigns unchanged.
 
-Each cycle is deliberately conservative:
+[Listmonk 6.0 or newer](https://github.com/knadh/listmonk/releases/tag/v6.0.0)
+is required because the synchronizer stores Hugo metadata in campaign-level
+`attribs`.
 
-1. Fetch and validate the entire `schemaVersion: 1` feed, including duplicate
-   campaign keys, before making any Listmonk mutation.
-2. Retrieve all accessible campaigns with
-   `GET /api/campaigns?per_page=all&no_body=true`.
-3. Match the configured post field to campaign names exactly and
-   case-sensitively.
-4. Create a draft if there is no match.
-5. Fetch and update a single matching draft.
-6. Skip a single matching non-draft campaign.
-7. Treat two or more same-name campaigns as ambiguous and mutate none of them.
+## How it works
 
-The service never calls Listmonk status, send, archive, or delete endpoints. It
-never recreates a sent, scheduled, running, paused, cancelled, finished, or
-otherwise non-draft campaign. Campaigns absent from the feed are left alone.
+```mermaid
+flowchart LR
+    Post["Hugo post<br><code>newsletter: true</code>"]
+    Build["CI/CD or local<br>Hugo build"]
+    Feed["<code>/newsletter.json</code><br>schema v1"]
+    Sync["hugo-listmonk-sync<br>validate and reconcile"]
+    Draft["Listmonk draft"]
+    Send["Review, test,<br>schedule and send"]
 
-Draft updates replace only the campaign name, subject, body, and
-`attribs.post`. Existing lists, sender, template, tags, messenger,
-campaign/content types, alternate body, headers, `send_at`, and all other
-top-level keys inside `attribs` are retained from the full campaign response.
-Creation-only defaults do not overwrite settings on existing drafts.
+    Post --> Build --> Feed --> Sync --> Draft --> Send
+```
+
+Hugo feed generation and draft reconciliation can be automated. Campaign
+review and sending remain explicit Listmonk actions.
+
+This repository includes both sides of the integration:
+
+- [`examples/hugo-newsletter`](examples/hugo-newsletter/) is a self-contained
+  Hugo feed implementation.
+- [`blog-updates.gohtml`](blog-updates.gohtml) is a configurable Listmonk email
+  template.
+- `src/hugo_listmonk_sync` contains the polling and reconciliation service.
+
+## Quick start
+
+You need:
+
+- Docker with Docker Compose
+- a reachable Listmonk 6.0+ instance
+- a published Hugo JSON feed that follows the [feed contract](#feed-contract)
+- a dedicated Listmonk API user with the
+  [required permissions](#listmonk-setup)
+
+Clone the repository and create a local environment file:
+
+```sh
+git clone https://github.com/mitcdh/hugo-listmonk-sync.git
+cd hugo-listmonk-sync
+cp .env.example .env
+```
+
+Edit `.env` and replace the example URLs, token, and list ID:
+
+```dotenv
+NEWSLETTER_JSON_URL=https://blog.example.com/newsletter.json
+LISTMONK_BASE_URL=https://listmonk.example.com
+LISTMONK_API_USERNAME=hugo-newsletter-sync
+LISTMONK_API_TOKEN=replace-with-api-token
+LISTMONK_LIST_IDS=1
+```
+
+`LISTMONK_LIST_IDS` uses Listmonk's positive numeric API IDs, not the public
+UUIDs used by subscription forms.
+
+Build and start the service:
+
+```sh
+docker compose up --build -d
+docker compose logs -f hugo-listmonk-sync
+```
+
+The first reconciliation runs immediately. By default, another cycle starts
+one hour after the previous cycle finishes. Open Listmonk and confirm that each
+unmatched feed entry appears as a draft campaign.
+
+Stop the service with:
+
+```sh
+docker compose down
+```
+
+## Hugo feed setup
+
+The included [`examples/hugo-newsletter`](examples/hugo-newsletter/) directory
+is a runnable reference implementation. Copy its newsletter layout and
+partials into your Hugo site, then merge the relevant settings from its
+[`hugo.toml`](examples/hugo-newsletter/hugo.toml).
+
+### Select posts
+
+The example feed includes pages in the `posts` section whose front matter sets
+`newsletter: true`:
+
+```yaml
+---
+title: "Post title"
+date: 2025-01-01T12:00:00+10:00
+description: "A concise description used in the newsletter."
+image: "/images/my-post.webp"
+newsletter: true
+tags: [Writing, Technology]
+---
+```
+
+The final path component of `.RelPermalink` becomes the default campaign key.
+For example, a post published at `/posts/my-post/` produces the key
+`my-post`.
+
+### Configure the output
+
+Add a custom output format to your Hugo configuration:
+
+```toml
+baseURL = "https://blog.example.com/"
+
+[outputFormats.Newsletter]
+  mediaType = "application/json"
+  baseName = "newsletter"
+  isPlainText = true
+  notAlternative = true
+
+[outputs]
+  home = ["HTML", "RSS", "JSON", "Newsletter"]
+```
+
+The `Newsletter` output renders
+[`layouts/home.newsletter.json`](examples/hugo-newsletter/layouts/home.newsletter.json)
+to `public/newsletter.json`. `baseURL` must be the site's canonical public URL
+so relative links and assets can be resolved for email clients.
+
+Use the layout with all four supporting partials:
+
+- [`absolute-urls.html`](examples/hugo-newsletter/layouts/partials/newsletter/absolute-urls.html)
+  finds `href`, `src`, `srcset`, and `poster` attributes in rendered HTML.
+- [`absolute-url.html`](examples/hugo-newsletter/layouts/partials/newsletter/absolute-url.html)
+  resolves site-relative, page-relative, and page-resource URLs.
+- [`absolute-srcset.html`](examples/hugo-newsletter/layouts/partials/newsletter/absolute-srcset.html)
+  resolves each candidate without losing its width or density descriptor.
+- [`escape-code-delimiters.html`](examples/hugo-newsletter/layouts/partials/newsletter/escape-code-delimiters.html)
+  protects `{{` and `}}` inside displayed code from Listmonk's Go template
+  renderer.
+
+Rendered URLs inside the `html` field become absolute. The top-level `image`
+field deliberately retains the front matter value so campaign templates can
+handle it as metadata.
+
+The example enables Goldmark's `unsafe` renderer only because its fixture
+contains trusted raw HTML. A site that does not intentionally allow raw HTML in
+Markdown does not need that setting.
+
+### Build and verify
+
+Build the standalone example from the repository root:
+
+```sh
+hugo --source examples/hugo-newsletter --gc --minify
+jq -e '.schemaVersion == 1 and (.posts | type == "array")' \
+  examples/hugo-newsletter/public/newsletter.json
+jq '.posts[] | {key, title, url}' \
+  examples/hugo-newsletter/public/newsletter.json
+```
+
+After deploying your Hugo site, verify the public feed:
+
+```sh
+curl --fail --silent --show-error https://blog.example.com/newsletter.json \
+  | jq '.posts[] | {key, title, url}'
+```
 
 ## Feed contract
 
-The feed root must be a JSON object with exactly `schemaVersion: 1` and a
-`posts` array:
+The response must be a JSON object containing `schemaVersion: 1` and a `posts`
+array:
 
 ```json
 {
   "schemaVersion": 1,
   "posts": [
     {
-      "key": "parsing-consensus",
-      "url": "https://blog.mitcdh.au/posts/parsing-consensus/",
-      "tags": ["Writing", "Nuclear"],
-      "date": "2026-07-18T00:00:00+10:00",
-      "description": "Experiments in parsing IAEA guidance",
-      "image": "/images/parsing-consensus.webp",
-      "readingTime": 12,
-      "title": "Parsing Consensus",
+      "key": "my-post",
+      "url": "https://blog.example.com/posts/my-post/",
+      "title": "My post",
+      "description": "A concise post description.",
+      "date": "2025-01-01T12:00:00+10:00",
+      "readingTime": 8,
+      "image": "/images/my-post.webp",
+      "tags": ["Writing", "Technology"],
       "html": "<p>Newsletter body</p>",
       "text": "Newsletter body"
     }
@@ -59,35 +202,82 @@ The feed root must be a JSON object with exactly `schemaVersion: 1` and a
 }
 ```
 
-Name, subject, and content selectors are literal top-level keys, not JSONPath
-expressions. Their values must be non-empty strings. Every post name must be
-unique for the cycle.
+By default, each post must have non-empty string values for:
 
-`attribs.post` contains a deep copy of every top-level post field except the
-large `html` and `text` bodies. Metadata values and relative image paths remain
-unchanged. A numeric `readingTime` is normalized to `"<N> min read"`; an
-existing string is preserved.
+- `key`, used as the Listmonk campaign name and synchronization key
+- `title`, used as the campaign subject
+- `html`, used as the campaign body
 
-## Listmonk requirements
+The `CAMPAIGN_*_FIELD` settings can select different top-level keys. Selectors
+are literal keys, not JSONPath expressions. Every selected campaign name must
+be unique within a cycle.
 
-Use Listmonk 6.0 or newer and create a dedicated API user under **Admin →
-Users**. Authenticate with that API user's username and token using HTTP Basic
-authentication.
+The synchronizer copies every top-level post field except `html` and `text`
+into `.Campaign.Attribs.post`. Arbitrary additional metadata is preserved. A
+numeric `readingTime` becomes `"<N> min read"`; an existing string is retained.
 
-Give the API user campaign read and management permissions
-(`campaigns:get`/`campaigns:manage`, or the corresponding `*_all`
-permissions), plus an attached list role that permits access to every ID in
-`LISTMONK_LIST_IDS` and to lists already attached to drafts it may update.
-Listmonk 6.1 separates `campaigns:send`; this service does not require or use
-that permission.
+The complete feed is validated before any Listmonk mutation. Invalid JSON, an
+unsupported schema version, a missing selected field, or duplicate campaign
+names reject the entire cycle.
 
-`LISTMONK_BASE_URL` is the origin, such as `https://listmonk.example.com`, and
-must not include `/api`.
+## Reconciliation and safety
+
+Campaign names are matched exactly and case-sensitively:
+
+| Matching campaigns | Action |
+| --- | --- |
+| None | Create a new draft. |
+| One draft | Refresh that draft from the feed. |
+| One non-draft | Leave it unchanged. |
+| Two or more | Treat the name as ambiguous and change none of them. |
+
+Draft updates replace only:
+
+- campaign name
+- subject
+- body
+- `attribs.post`
+
+Existing lists, sender, template, tags, messenger, campaign and content types,
+body source, alternate body, headers, scheduled time, and unrelated campaign
+attributes are retained. Creation-only defaults never overwrite an existing
+draft. Campaigns absent from the feed are left alone.
+
+The service never calls Listmonk's send, status, archive, or delete endpoints.
+It also rechecks a campaign's status immediately before updating it, avoiding
+an update if the campaign left draft status during reconciliation.
+
+After the feed passes validation, posts are reconciled independently. A
+Listmonk error for one post is logged without preventing the remaining posts
+from being processed, and each cycle ends with an outcome summary.
+
+## Listmonk setup
+
+Create a dedicated API user under **Admin → Users**. The service authenticates
+with that user's username and generated token using HTTP Basic authentication.
+See Listmonk's [API authentication](https://listmonk.app/docs/apis/apis/) and
+[roles and permissions](https://listmonk.app/docs/roles-and-permissions/)
+documentation.
+
+Assign:
+
+- `campaigns:get` and `campaigns:manage`, with a list role that covers every
+  configured list and every list already attached to drafts the service may
+  update; or
+- the corresponding `campaigns:get_all` and `campaigns:manage_all`
+  permissions.
+
+Listmonk 6.1 separates `campaigns:send` from campaign management. This service
+does not require or use that permission.
+
+`LISTMONK_BASE_URL` must be the Listmonk origin, such as
+`https://listmonk.example.com`. Do not include `/api` or another path.
 
 ## Configuration
 
-Configuration is exclusively through environment variables. Copy
-`.env.example` to `.env` for Docker Compose; never commit the resulting file.
+Configuration is exclusively through environment variables. `.env.example`
+contains every setting used by the example Compose service. Copy it to the
+git-ignored `.env` file and never commit real credentials.
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
@@ -96,108 +286,101 @@ Configuration is exclusively through environment variables. Copy
 | `LISTMONK_API_USERNAME` | yes | — | Dedicated Listmonk API username. |
 | `LISTMONK_API_TOKEN` | yes | — | API user's secret token. |
 | `LISTMONK_LIST_IDS` | yes | — | Comma-separated, unique positive list IDs for new campaigns. |
-| `CAMPAIGN_NAME_FIELD` | no | `key` | Exact top-level post key used as campaign name and sync key. |
-| `CAMPAIGN_SUBJECT_FIELD` | no | `title` | Exact top-level post key used as subject. |
-| `CAMPAIGN_CONTENT_FIELD` | no | `html` | Exact top-level post key used as body. |
+| `CAMPAIGN_NAME_FIELD` | no | `key` | Post key used as campaign name and synchronization key. |
+| `CAMPAIGN_SUBJECT_FIELD` | no | `title` | Post key used as campaign subject. |
+| `CAMPAIGN_CONTENT_FIELD` | no | `html` | Post key used as campaign body. |
 | `LISTMONK_CONTENT_TYPE` | no | `html` | New campaign content type: `richtext`, `html`, `markdown`, `plain`, or `visual`. |
 | `LISTMONK_CAMPAIGN_TYPE` | no | `regular` | New campaign type: `regular` or `optin`. |
-| `LISTMONK_MESSENGER` | no | `email` | New campaign messenger, including a configured custom messenger name. |
+| `LISTMONK_MESSENGER` | no | `email` | New campaign messenger or configured custom messenger name. |
 | `LISTMONK_TEMPLATE_ID` | no | unset | Positive template ID for new campaigns; omitted when unset. |
-| `LISTMONK_FROM_EMAIL` | no | unset | Sender for new campaigns; omitted when unset so Listmonk uses its default. |
+| `LISTMONK_FROM_EMAIL` | no | unset | Sender for new campaigns; omitted so Listmonk can use its default. |
 | `LISTMONK_CAMPAIGN_TAGS` | no | unset | Comma-separated tags applied only when creating campaigns. |
-| `POLL_INTERVAL_SECONDS` | no | `3600` | Positive integer wait after each completed cycle. |
-| `HTTP_TIMEOUT_SECONDS` | no | `30` | Positive request timeout in seconds; decimals are accepted. |
-| `HTTP_MAX_RETRIES` | no | `3` | Non-negative retry count after the initial safe request. |
+| `POLL_INTERVAL_SECONDS` | no | `3600` | Wait after each completed cycle, in seconds. |
+| `HTTP_TIMEOUT_SECONDS` | no | `30` | Positive request timeout; decimals are accepted. |
+| `HTTP_MAX_RETRIES` | no | `3` | Retry count after the initial safe request. |
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`. |
-| `RUN_ONCE` | no | `false` | `true` runs one immediate cycle and exits. |
+| `RUN_ONCE` | no | `false` | Run one immediate cycle and exit. |
 
-The first synchronization begins immediately at startup. In continuous mode,
-the interval starts only after that cycle completes, so slow runs never overlap.
-`RUN_ONCE=true` is useful with an external scheduler and in deployment tests.
+Continuous mode waits only after a cycle completes, so slow cycles never
+overlap. `RUN_ONCE=true` runs one cycle and exits, which is useful when an
+external scheduler owns the cadence.
 
-Feed GETs and Listmonk GET/PUTs retry HTTP 429, transient 5xx responses, and
-network failures with bounded exponential backoff and `Retry-After` support.
-Campaign POSTs are attempted exactly once because Listmonk does not document an
-idempotency key. If a POST result is uncertain, the next cycle discovers a
-successfully created campaign by its name.
+Feed GETs and Listmonk GET/PUTs retry HTTP 429 responses, transient 5xx
+responses, and network failures with bounded exponential backoff and
+`Retry-After` support. Campaign POSTs are attempted once because Listmonk does
+not document an idempotency key. If a POST result is uncertain, the next cycle
+discovers a successfully created campaign by name. A cycle-level failure is
+logged and retried at the next configured interval.
 
-Normal TLS certificate verification is always enabled. For private certificate
-authorities, mount the CA bundle into the container and set the standard
-`SSL_CERT_FILE` (or `SSL_CERT_DIR`) environment variable to its in-container
-path. There is intentionally no insecure TLS switch.
+TLS certificate verification is always enabled. For a private certificate
+authority, mount its CA bundle into the container and set the standard
+`SSL_CERT_FILE` or `SSL_CERT_DIR` environment variable to the in-container
+path. There is no insecure TLS option.
 
-## Run with Docker
+## Campaign template
 
-Build and start a one-off container:
+Listmonk templates can read synchronized metadata through
+`.Campaign.Attribs.post`:
 
-```sh
-cp .env.example .env
-# Edit .env and replace all example credentials and endpoints.
-docker build -t hugo-listmonk-sync:local .
-docker run --rm --env-file .env hugo-listmonk-sync:local
+```go-html-template
+{{ $assetBaseURL := "https://blog.example.com" }}
+{{ with .Campaign.Attribs.post }}
+  <h1>{{ .title }}</h1>
+  <p>{{ .description }}</p>
+  <p>{{ .date }} · {{ .readingTime }}</p>
+  {{ if .image }}<img src="{{ $assetBaseURL }}{{ .image }}" alt="" />{{ end }}
+  <a href="{{ .url }}">Read on the web</a>
+{{ end }}
 ```
 
-Or use the example Compose service:
+Rendered images in the campaign body are already absolute. The base URL prefix
+above supports a relative top-level `image` value.
 
-```sh
-docker compose up --build -d
-docker compose logs -f hugo-listmonk-sync
-docker compose down
-```
+[`blog-updates.gohtml`](blog-updates.gohtml) is a complete responsive example.
+Its opening `TEMPLATE SETTINGS` block separates:
 
-The image contains no credentials or persistent state, runs as UID/GID 10001,
-and uses `python:3.13-slim`. SIGTERM and SIGINT interrupt the interval wait for
-clean container shutdown.
+- site and publisher identity
+- site, asset, logo, and fallback post URLs
+- optional button visibility and email copy
+- date formats and font stacks
+- layout dimensions and colour palettes
 
-### GitHub Container Registry
+At minimum, replace `baseURL`, `siteName`, `publisherName`, `postalAddress`,
+and the logo settings. Set `assetBaseURL` separately when assets are served
+from a CDN. `showReadPostButton` controls the optional button beneath the
+campaign body.
 
-CI publishes a multi-platform image for AMD64 and ARM64 to:
+Post links prefer the canonical `.Campaign.Attribs.post.url` value and fall
+back to `baseURL`, `postPath`, and the campaign name only when that metadata is
+absent.
+
+## Container image
+
+CI publishes AMD64 and ARM64 images to:
 
 ```text
 ghcr.io/mitcdh/hugo-listmonk-sync
 ```
 
-Every successful push to the repository's default branch publishes `latest`,
-the branch name, and a commit-based `sha-...` tag. Pushing a semantic version
-tag such as `v1.2.3` also publishes `v1.2.3`, `1.2.3`, `1.2`, and `1`.
-
-Pull and run the latest image with:
+Run the latest image without building locally:
 
 ```sh
 docker pull ghcr.io/mitcdh/hugo-listmonk-sync:latest
 docker run --rm --env-file .env ghcr.io/mitcdh/hugo-listmonk-sync:latest
 ```
 
-Pull requests and non-default branches build the image but never publish it.
-Publication uses the workflow's built-in `GITHUB_TOKEN`; no registry secret is
-required.
+Successful pushes to the default branch publish `latest`, the branch name, and
+a `sha-...` tag. A semantic version tag such as `v1.2.3` publishes `v1.2.3`,
+`1.2.3`, `1.2`, and `1`. Pull requests and other branches are build-only.
 
-GitHub makes a newly published container package private by default. After the
-first successful default-branch build, open the package settings on GitHub and
-change its visibility to **Public** if anonymous pulls are desired. Private
-packages require an authenticated `docker login ghcr.io`.
+The image contains no credentials or persistent application state, uses
+`python:3.13-slim`, and runs as UID/GID 10001. SIGTERM and SIGINT interrupt the
+polling wait for a clean shutdown.
 
-## Template metadata
+## Development
 
-Listmonk templates can read the synchronized map through
-`.Campaign.Attribs.post`:
-
-```go-html-template
-{{ with .Campaign.Attribs.post }}
-  <h1>{{ .title }}</h1>
-  <p>{{ .description }}</p>
-  <p>{{ .date }} · {{ .readingTime }}</p>
-  {{ if .image }}<img src="{{ .image }}" alt="" />{{ end }}
-  <a href="{{ .url }}">Read on the web</a>
-{{ end }}
-```
-
-The repository's `blog-updates.gohtml` is a fuller Listmonk campaign-template
-example.
-
-## Local development
-
-Dependencies are resolved in `uv.lock`.
+The project requires Python 3.13 and uses
+[`uv`](https://docs.astral.sh/uv/) with a checked-in lockfile:
 
 ```sh
 uv sync --frozen --all-groups
@@ -207,31 +390,34 @@ uv run mypy
 uv run pytest --cov --cov-report=term-missing
 ```
 
-Run the installed console command or module with environment variables already
-exported:
+With the required environment variables already exported, run:
 
 ```sh
 uv run hugo-listmonk-sync
 uv run python -m hugo_listmonk_sync
 ```
 
-Build and smoke-test the container against local mock feed/Listmonk endpoints:
+Build and smoke-test the container against local mock services:
 
 ```sh
 docker build -t hugo-listmonk-sync:smoke .
 ./scripts/container-smoke.sh hugo-listmonk-sync:smoke
 ```
 
-The CI workflow runs Ruff lint/format checks, strict mypy checking, and the
-pytest suite before building the Docker image. Successful default-branch and
-`v*` tag builds are published to GHCR; pull requests and other branches are
-build-only.
+The GitHub Actions workflow runs Ruff, formatting, strict mypy checks, and the
+pytest suite before building the multi-platform image.
 
-## Module layout
+### Module layout
 
-- `config.py` parses and validates environment-only configuration.
-- `feed.py` fetches and fully validates schema v1 feeds.
-- `listmonk.py` implements authenticated campaign API operations and payloads.
-- `reconcile.py` applies exact matching and mutation rules with cycle summaries.
-- `loop.py` implements immediate startup, fixed post-run waits, and shutdown.
-- `main.py` wires the clients and console entry point together.
+- [`config.py`](src/hugo_listmonk_sync/config.py) parses and validates
+  environment-only configuration.
+- [`feed.py`](src/hugo_listmonk_sync/feed.py) retrieves and validates schema v1
+  feeds.
+- [`listmonk.py`](src/hugo_listmonk_sync/listmonk.py) implements authenticated
+  campaign API operations.
+- [`reconcile.py`](src/hugo_listmonk_sync/reconcile.py) applies matching and
+  mutation rules.
+- [`loop.py`](src/hugo_listmonk_sync/loop.py) handles immediate startup,
+  post-run waits, and shutdown.
+- [`main.py`](src/hugo_listmonk_sync/main.py) wires the clients and console
+  entry point together.

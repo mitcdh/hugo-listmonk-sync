@@ -1,0 +1,33 @@
+{{- $page := .page -}}
+{{- $url := .url -}}
+{{- $trimmedURL := strings.TrimSpace $url -}}
+{{- $result := $url -}}
+{{- /* Preserve fragments, protocol-relative URLs, and every explicit scheme. */ -}}
+{{- $preserve := or
+  (eq $trimmedURL "")
+  (strings.HasPrefix $trimmedURL "#")
+  (strings.HasPrefix $trimmedURL "//")
+  (gt (len (findRE `(?i)^[a-z][a-z0-9+.-]*:` $trimmedURL 1)) 0)
+-}}
+
+{{- if not $preserve -}}
+  {{- if strings.HasPrefix $trimmedURL "/" -}}
+    {{- $result = absURL $trimmedURL -}}
+  {{- else -}}
+    {{- $path := replaceRE `^([^?#]*).*$` "$1" $trimmedURL -}}
+    {{- $suffix := strings.TrimPrefix $path $trimmedURL -}}
+    {{- if eq $path "" -}}
+      {{- $result = printf "%s%s" $page.Permalink $suffix -}}
+    {{- else -}}
+      {{- $parsedURL := urls.Parse $path -}}
+      {{- /* Page resources may publish somewhere other than the page permalink. */ -}}
+      {{- with $page.Resources.Get $parsedURL.Path -}}
+        {{- $result = printf "%s%s" .Permalink $suffix -}}
+      {{- else -}}
+        {{- $result = printf "%s%s" (urls.JoinPath $page.Permalink $path) $suffix -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- return $result -}}
