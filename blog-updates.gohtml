@@ -1,0 +1,605 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+{{ $baseURL := "https://blog.mitcdh.au" }}
+{{ $postURL := printf "%s/posts/%s/" $baseURL .Campaign.Name }}
+
+{{- /* Brand palette */ -}}
+{{ $brand := "#aa55ff" }}
+{{ $white := "#ffffff" }}
+{{ $buttonText := $white }}
+
+{{- /* Light palette */ -}}
+{{ $ink := "#17181e" }}
+{{ $bodyText := "#4c526c" }}
+{{ $mutedText := "#6c7088" }}
+{{ $canvas := "#f9f9fc" }}
+{{ $border := "#dfe0e8" }}
+{{ $borderSoft := "#ededf3" }}
+{{ $tableHeader := "#e6e7ee" }}
+{{ $codeText := "#4c4f69" }}
+{{ $codeBorder := "#ccd0da" }}
+
+{{- /* Dark palette */ -}}
+{{ $darkCanvas := "#121212" }}
+{{ $darkSurface := "#1a1a1a" }}
+{{ $darkSurfaceRaised := "#2b2b33" }}
+{{ $darkBorder := "#383842" }}
+{{ $darkHeading := "#fafafa" }}
+{{ $darkBodyText := "#cdcdce" }}
+
+{{- /*
+Campaign Attributes example:
+{
+  "post": {
+    "title": "Example post title",
+    "date": "2026-07-18T00:00:00+10:00",
+    "description": "Post description",
+    "image": "/images/example.webp",
+    "readingTime": "12 min read"
+  }
+}
+*/ -}}
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+    <title>{{ .Campaign.Subject }}</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+
+    <style type="text/css">
+        html,
+        body {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        body,
+        table,
+        td,
+        a {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+
+        table,
+        td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+            border-collapse: collapse;
+        }
+
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+            outline: none;
+            text-decoration: none;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        .preheader {
+            display: none !important;
+            visibility: hidden;
+            opacity: 0;
+            color: transparent;
+            height: 0;
+            width: 0;
+            max-height: 0;
+            max-width: 0;
+            overflow: hidden;
+            mso-hide: all;
+        }
+
+        .header-description {
+            color: {{ $bodyText }};
+            font-family: "Atkinson Hyperlegible Next", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-size: 19px;
+            line-height: 30px;
+            margin: 16px 0 0;
+            max-width: 600px;
+        }
+
+        .post-byline {
+            color: {{ $mutedText }};
+            font-family: Inter, "Helvetica Neue", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 20px;
+            margin: 15px 0 0;
+        }
+
+        .post-cover {
+            display: block;
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 18px;
+        }
+
+        .content a.post-button {
+            color: {{ $buttonText }};
+            background-color: {{ $brand }};
+            border-radius: 8px;
+            display: inline-block;
+            font-family: "Atkinson Hyperlegible Next", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 19px;
+            padding: 13px 17px;
+            text-decoration: none;
+        }
+
+        .campaign-content:empty,
+        .campaign-content > p:empty:first-child:last-child {
+            display: none;
+        }
+
+        .content h1,
+        .content h2,
+        .content h3,
+        .content h4 {
+            color: {{ $ink }};
+            font-family: Inter, "Helvetica Neue", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-weight: 700;
+            letter-spacing: -0.8px;
+            margin: 0;
+        }
+
+        .content h1 {
+            font-size: 34px;
+            line-height: 42px;
+            letter-spacing: -1.1px;
+            margin-bottom: 20px;
+        }
+
+        .content h2 {
+            font-size: 27px;
+            line-height: 35px;
+            margin-top: 38px;
+            margin-bottom: 14px;
+        }
+
+        .content h3 {
+            font-size: 21px;
+            line-height: 29px;
+            margin-top: 30px;
+            margin-bottom: 10px;
+        }
+
+        .content h4 {
+            font-size: 17px;
+            line-height: 25px;
+            margin-top: 24px;
+            margin-bottom: 8px;
+        }
+
+        .content p,
+        .content li,
+        .campaign-content td,
+        .campaign-content th {
+            color: {{ $bodyText }};
+            font-family: "Atkinson Hyperlegible Next", "Segoe UI", Helvetica, Arial, sans-serif;
+            font-size: 17px;
+            line-height: 29px;
+        }
+
+        .content p {
+            margin: 0 0 20px;
+        }
+
+        .content ul,
+        .content ol {
+            color: {{ $bodyText }};
+            margin: 0 0 22px;
+            padding-left: 24px;
+        }
+
+        .content li {
+            margin-bottom: 8px;
+        }
+
+        .content a {
+            color: {{ $ink }};
+            font-weight: 700;
+            text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 3px;
+        }
+
+        .content img {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            margin: 28px 0 10px;
+            border-radius: 18px;
+        }
+
+        .content blockquote {
+            color: {{ $bodyText }};
+            background-color: {{ $white }};
+            border-left: 4px solid {{ $mutedText }};
+            margin: 28px 0;
+            padding: 20px 24px;
+        }
+
+        .content blockquote p:last-child {
+            margin-bottom: 0;
+        }
+
+        .content hr {
+            height: 1px;
+            background-color: {{ $border }};
+            border: 0;
+            margin: 36px 0;
+        }
+
+        .campaign-content table {
+            width: 100%;
+            margin: 26px 0;
+        }
+
+        .campaign-content th {
+            color: {{ $ink }};
+            background-color: {{ $tableHeader }};
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 23px;
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        .campaign-content td {
+            border-bottom: 1px solid {{ $border }};
+            font-size: 15px;
+            line-height: 24px;
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        .content code {
+            color: {{ $codeText }};
+            background-color: {{ $white }};
+            border: 1px solid {{ $codeBorder }};
+            border-radius: 5px;
+            font-family: Consolas, Monaco, "Courier New", monospace;
+            font-size: 14px;
+            padding: 2px 5px;
+        }
+
+        .content pre {
+            color: {{ $codeText }};
+            background-color: {{ $white }};
+            border: 1px solid {{ $codeBorder }};
+            border-radius: 12px;
+            font-family: Consolas, Monaco, "Courier New", monospace;
+            font-size: 13px;
+            line-height: 21px;
+            margin: 26px 0;
+            overflow-x: auto;
+            padding: 18px;
+            white-space: pre-wrap;
+        }
+
+        .content pre code {
+            background: transparent;
+            border: 0;
+            padding: 0;
+        }
+
+        @media screen and (max-width: 680px) {
+            .email-width {
+                width: 100% !important;
+            }
+
+            .header-pad {
+                padding: 20px 20px 36px !important;
+            }
+
+            .content-pad {
+                padding: 36px 20px 28px !important;
+            }
+
+            .footer-pad {
+                padding: 28px 20px 34px !important;
+            }
+
+            .view-online {
+                font-size: 12px !important;
+            }
+
+            .header-title {
+                font-size: 32px !important;
+                line-height: 39px !important;
+                letter-spacing: -1px !important;
+            }
+
+            .header-description {
+                font-size: 17px !important;
+                line-height: 27px !important;
+            }
+
+            .post-byline {
+                font-size: 12px !important;
+                line-height: 19px !important;
+            }
+
+            .post-cover {
+                border-radius: 12px !important;
+            }
+
+            .content h1 {
+                font-size: 29px !important;
+                line-height: 37px !important;
+            }
+
+            .content h2 {
+                font-size: 24px !important;
+                line-height: 32px !important;
+            }
+
+            .content p,
+            .content li {
+                font-size: 16px !important;
+                line-height: 27px !important;
+            }
+
+            .campaign-content th,
+            .campaign-content td {
+                padding: 8px !important;
+            }
+
+            .footer-copy,
+            .footer-cta {
+                display: block !important;
+                width: 100% !important;
+                text-align: left !important;
+            }
+
+            .footer-cta {
+                padding: 20px 0 0 !important;
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .header-bg,
+            .footer-bg {
+                background-color: {{ $darkSurface }} !important;
+                border-color: {{ $darkSurfaceRaised }} !important;
+            }
+
+            .header-divider {
+                border-bottom-color: {{ $darkBorder }} !important;
+            }
+
+            .content-bg {
+                background-color: {{ $darkCanvas }} !important;
+            }
+
+            .brand-name,
+            .header-title,
+            .content h1,
+            .content h2,
+            .content h3,
+            .content h4,
+            .campaign-content th,
+            .footer-strong {
+                color: {{ $darkHeading }} !important;
+            }
+
+            .header-kicker,
+            .view-online,
+            .content a {
+                color: {{ $darkHeading }} !important;
+            }
+
+            .brand-tagline,
+            .header-description,
+            .post-byline,
+            .content p,
+            .content li,
+            .campaign-content td,
+            .footer-text,
+            .footer-link {
+                color: {{ $darkBodyText }} !important;
+            }
+
+            .content blockquote,
+            .content pre,
+            .content code {
+                color: {{ $darkBodyText }} !important;
+                background-color: {{ $darkSurface }} !important;
+                border-color: {{ $darkBorder }} !important;
+            }
+
+            .content hr {
+                background-color: {{ $darkBorder }} !important;
+            }
+
+            .campaign-content td {
+                background-color: transparent !important;
+                border-color: {{ $darkBorder }} !important;
+            }
+
+            .campaign-content th {
+                background-color: {{ $darkSurfaceRaised }} !important;
+            }
+
+            .footer-button {
+                color: {{ $buttonText }} !important;
+                background-color: {{ $brand }} !important;
+            }
+
+            .content a.post-button {
+                color: {{ $buttonText }} !important;
+                background-color: {{ $brand }} !important;
+            }
+
+        }
+
+        [data-ogsc] .header-bg,
+        [data-ogsc] .footer-bg {
+            background-color: {{ $darkSurface }} !important;
+            border-color: {{ $darkSurfaceRaised }} !important;
+        }
+
+        [data-ogsc] .header-divider {
+            border-bottom-color: {{ $darkBorder }} !important;
+        }
+
+        [data-ogsc] .content-bg {
+            background-color: {{ $darkCanvas }} !important;
+        }
+
+        [data-ogsc] .brand-name,
+        [data-ogsc] .header-title,
+        [data-ogsc] .content h1,
+        [data-ogsc] .content h2,
+        [data-ogsc] .content h3,
+        [data-ogsc] .content h4,
+        [data-ogsc] .footer-strong {
+            color: {{ $darkHeading }} !important;
+        }
+
+        [data-ogsc] .header-kicker,
+        [data-ogsc] .view-online,
+        [data-ogsc] .content a {
+            color: {{ $darkHeading }} !important;
+        }
+
+        [data-ogsc] .brand-tagline,
+        [data-ogsc] .header-description,
+        [data-ogsc] .post-byline,
+        [data-ogsc] .content p,
+        [data-ogsc] .content li,
+        [data-ogsc] .campaign-content td,
+        [data-ogsc] .footer-text,
+        [data-ogsc] .footer-link {
+            color: {{ $darkBodyText }} !important;
+        }
+
+        [data-ogsc] .footer-button {
+            color: {{ $buttonText }} !important;
+            background-color: {{ $brand }} !important;
+        }
+
+        [data-ogsc] .content a.post-button {
+            color: {{ $buttonText }} !important;
+            background-color: {{ $brand }} !important;
+        }
+
+    </style>
+
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td, a { font-family: Arial, sans-serif !important; }
+    </style>
+    <![endif]-->
+</head>
+
+<body class="content-bg" style="width: 100%; margin: 0; padding: 0; background-color: {{ $canvas }}; color: {{ $ink }}; font-family: 'Atkinson Hyperlegible Next', 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <div class="preheader">
+        {{ with .Campaign.Attribs.post.description }}{{ . }}{{ else }}New post from Mitchell Hewes &mdash; {{ .Campaign.Subject }}{{ end }}
+        &#847;&zwnj;&nbsp;&#8199;&#65279;&#847;&zwnj;&nbsp;&#8199;&#65279;&#847;&zwnj;&nbsp;&#8199;&#65279;
+    </div>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+        <tr>
+            <td class="header-bg header-pad" align="center" bgcolor="{{ $white }}" style="background-color: {{ $white }}; padding: 26px 24px 46px;">
+                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="width: 640px; max-width: 640px;">
+                    <tr>
+                        <td width="50" valign="middle" style="width: 50px; padding: 0;">
+                            <a href="{{ $baseURL }}/" aria-label="Visit blog.mitcdh">
+                                <img src="{{ $baseURL }}/favicon-96x96.png" width="42" height="42" alt="&gt;&gt;" style="display: block; width: 42px; height: 42px;" />
+                            </a>
+                        </td>
+                        <td valign="middle" style="padding: 0 12px;">
+                            <a href="{{ $baseURL }}/" class="brand-name" style="display: block; color: {{ $ink }}; font-family: Inter, 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 19px; font-weight: 700; line-height: 23px; letter-spacing: -0.5px; text-decoration: none;">mitcdh.au</a>
+                            <span class="brand-tagline" style="display: block; color: {{ $bodyText }}; font-size: 12px; line-height: 17px;">Securer of Computers and Neutrons.</span>
+                        </td>
+                        <td align="right" valign="middle" style="padding: 0;">
+                            <a href="{{ MessageURL }}" class="view-online" style="color: {{ $ink }}; font-size: 13px; font-weight: 700; line-height: 18px; text-decoration: underline; text-underline-offset: 2px;">View online</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="header-divider" colspan="3" style="padding: 24px 0 0; border-bottom: 1px solid {{ $borderSoft }}; font-size: 0; line-height: 0;">&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3" style="padding: 24px 0 0;">
+                            <div class="header-kicker" style="margin: 0 0 12px; color: {{ $mutedText }}; font-family: Inter, 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 700; line-height: 16px; letter-spacing: 1px; text-transform: uppercase;">New blog post</div>
+                            <h1 class="header-title" style="max-width: 610px; margin: 0; color: {{ $ink }}; font-family: Inter, 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 42px; font-weight: 700; line-height: 50px; letter-spacing: -1.6px;">{{ with .Campaign.Attribs.post.title }}{{ . }}{{ else }}{{ $.Campaign.Subject }}{{ end }}</h1>
+                            {{ with .Campaign.Attribs.post.description }}
+                            <p class="header-description" style="max-width: 600px; margin: 16px 0 0; color: {{ $bodyText }}; font-family: 'Atkinson Hyperlegible Next', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 19px; line-height: 30px;">{{ . }}</p>
+                            {{ end }}
+                            {{ with .Campaign.Attribs.post }}
+                            <p class="post-byline" style="margin: 15px 0 0; color: {{ $mutedText }}; font-family: Inter, 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; font-weight: 600; line-height: 20px;">Mitchell Hewes{{ with .date }}&nbsp;&nbsp;&middot;&nbsp;&nbsp;{{ toDate "2006-01-02T15:04:05Z07:00" . | date "2 January 2006" }}{{ end }}{{ with .readingTime }}&nbsp;&nbsp;&middot;&nbsp;&nbsp;{{ . }}{{ end }}</p>
+                            {{ end }}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+
+        <tr>
+            <td class="content-bg" align="center" bgcolor="{{ $canvas }}" style="background-color: {{ $canvas }};">
+                <!--[if mso]>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="640"><tr><td>
+                <![endif]-->
+                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="width: 640px; max-width: 640px;">
+                    <tr>
+                        <td class="content content-pad" style="padding: 46px 0 32px;">
+                            {{ with .Campaign.Attribs.post }}
+                            {{ if .image }}
+                            <a href="{{ $postURL }}" style="display: block; text-decoration: none;">
+                                <img class="post-cover" src="{{ $baseURL }}{{ .image }}" width="640" alt="{{ with .title }}{{ . }}{{ else }}{{ $.Campaign.Subject }}{{ end }}" style="display: block; width: 100%; max-width: 640px; height: auto; margin: 0; border-radius: 18px;" />
+                            </a>
+                            {{ end }}
+                            {{ end }}
+
+                            <div class="campaign-content" style="margin-top: 30px;">{{ template "content" . }}</div>
+
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border: 0; margin: 30px 0 0;">
+                                <tr>
+                                    <td style="border: 0; padding: 0;">
+                                        <a href="{{ $postURL }}" class="post-button" style="display: inline-block; color: {{ $buttonText }}; background-color: {{ $brand }}; border-radius: 8px; font-family: 'Atkinson Hyperlegible Next', 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; line-height: 19px; padding: 13px 17px; text-decoration: none;">Read the full post&nbsp;&nbsp;&rarr;</a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+                <!--[if mso]>
+                </td></tr></table>
+                <![endif]-->
+            </td>
+        </tr>
+
+        <tr>
+            <td class="footer-bg footer-pad" align="center" bgcolor="{{ $white }}" style="background-color: {{ $white }}; padding: 32px 24px 38px;">
+                <table class="email-width" role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="width: 640px; max-width: 640px;">
+                    <tr>
+                        <td class="footer-copy" align="left" valign="top">
+                            <p class="footer-strong" style="margin: 0 0 6px; color: {{ $ink }}; font-size: 13px; font-weight: 700; line-height: 20px;">Published by Mitchell Hewes</p>
+                            <p class="footer-text" style="margin: 0 0 14px; color: {{ $bodyText }}; font-size: 12px; line-height: 19px;">PO Box 829, Sutherland NSW 1499, Australia</p>
+                            <p style="margin: 0; color: {{ $bodyText }}; font-size: 12px; line-height: 20px;">
+                                <a href="{{ UnsubscribeURL }}" class="footer-link" style="color: {{ $bodyText }}; text-decoration: underline; text-underline-offset: 2px;">{{ L.T "email.unsub" }}</a>
+                                <span aria-hidden="true" style="color: {{ $mutedText }}; padding: 0 8px;">&bull;</span>
+                                <a href="{{ MessageURL }}" class="footer-link" style="color: {{ $bodyText }}; text-decoration: underline; text-underline-offset: 2px;">{{ L.T "email.viewInBrowser" }}</a>
+                            </p>
+                        </td>
+                        <td class="footer-cta" align="right" valign="top" style="padding-left: 20px;">
+                            <a href="{{ $baseURL }}/" class="footer-button" style="display: inline-block; color: {{ $buttonText }}; background-color: {{ $brand }}; border-radius: 8px; font-size: 14px; font-weight: 700; line-height: 18px; padding: 12px 16px; text-decoration: none;">Visit the blog&nbsp;&nbsp;&rarr;</a>
+                        </td>
+                    </tr>
+                </table>
+                <div style="font-size: 0; line-height: 0; height: 0; overflow: hidden;">{{ TrackView }}</div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
