@@ -38,12 +38,20 @@ class Synchronizer:
         self,
         feed_client: FeedClient,
         listmonk_client: ListmonkClient,
+        *,
+        ignore_lastmod: bool = False,
     ) -> None:
         self._feed = feed_client
         self._listmonk = listmonk_client
+        self._ignore_lastmod = ignore_lastmod
 
     def run_cycle(self) -> CycleSummary:
         """Run one full synchronization cycle."""
+        if self._ignore_lastmod:
+            logger.warning(
+                "IGNORE_LASTMOD is enabled; forcing generated-field updates "
+                "for exact matching drafts"
+            )
         posts = self._feed.fetch()
         campaigns = self._listmonk.list_campaigns()
         by_name = _index_campaigns(campaigns)
@@ -146,7 +154,7 @@ class Synchronizer:
         match: CampaignRef,
         existing: dict[str, object],
     ) -> _DraftDecision:
-        if post.lastmod is None:
+        if self._ignore_lastmod or post.lastmod is None:
             return "update"
 
         stored = _stored_lastmod(existing)

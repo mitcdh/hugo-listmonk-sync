@@ -161,3 +161,51 @@ def test_malformed_optional_publication_date_is_omitted(config):
 
     assert "not-a-date" not in rendered
     assert "12 min read" in rendered
+
+
+def test_strips_web_controls_and_internal_fragment_navigation():
+    converted = plaintext._convert_html(
+        "<p>Claim<sup>"
+        '<a class="footnote-ref" href="#fn:5">5</a>'
+        "</sup>.</p>"
+        '<figure class="code-block"><figcaption>'
+        '<span class="code-block__label">example.yaml</span>'
+        '<a class="code-block__source" href="https://example.com/source">'
+        "Source</a>"
+        '<button type="button" hidden>Wrap</button>'
+        '<button type="button" hidden>Copy</button>'
+        "</figcaption><pre><code>"
+        '<span class="line"><span class="ln">'
+        '<a class="lnlinks" href="#code-1-line-1">1</a></span>'
+        '<span class="cl">---</span></span>\n'
+        '<span class="line"><span class="ln">'
+        '<a class="lnlinks" href="#code-1-line-2">2</a></span>'
+        '<span class="cl">title: Example</span></span>'
+        "</code></pre>"
+        '<span class="screen-reader-text" data-code-status>Copied</span>'
+        "</figure><h2>References</h2>"
+        '<div class="footnotes"><hr><ol><li><p>Reference '
+        '<a href="https://example.com/ref">https://example.com/ref</a>&nbsp;'
+        '<a class="footnote-backref" href="#fnref:5">↩︎</a>'
+        "</p></li></ol></div>"
+    )
+
+    assert "Claim[5]." in converted
+    assert "example.yaml" in converted
+    assert "[Source] (https://example.com/source)" in converted
+    assert "```\n---\ntitle: Example\n```" in converted
+    assert "References\n----------\n\n1. Reference https://example.com/ref" in converted
+    assert "Wrap" not in converted
+    assert "Copy" not in converted
+    assert "Copied" not in converted
+    assert "(#fn" not in converted
+    assert "(#code-" not in converted
+    assert "↩" not in converted
+
+
+def test_preserves_iframe_destination_as_plain_text_link():
+    converted = plaintext._convert_html(
+        '<iframe title="Demonstration" src="https://www.youtube.com/embed/abc"></iframe>'
+    )
+
+    assert converted == ("[Video: Demonstration] (https://www.youtube.com/embed/abc)")

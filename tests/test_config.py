@@ -34,6 +34,7 @@ def test_parses_required_values_and_defaults(base_env):
     assert config.log_level == "INFO"
     assert config.numeric_log_level == logging.INFO
     assert config.run_once is False
+    assert config.ignore_lastmod is False
 
 
 def test_parses_all_optional_values(base_env):
@@ -58,6 +59,7 @@ def test_parses_all_optional_values(base_env):
             "HTTP_MAX_RETRIES": "0",
             "LOG_LEVEL": "debug",
             "RUN_ONCE": "TRUE",
+            "IGNORE_LASTMOD": "TRUE",
         }
     )
 
@@ -82,6 +84,7 @@ def test_parses_all_optional_values(base_env):
     assert config.http_max_retries == 0
     assert config.log_level == "DEBUG"
     assert config.run_once is True
+    assert config.ignore_lastmod is True
 
 
 @pytest.mark.parametrize(
@@ -168,6 +171,7 @@ def test_rejects_invalid_urls(base_env, name, value):
         ("LISTMONK_CAMPAIGN_TYPE", "transactional"),
         ("LOG_LEVEL", "TRACE"),
         ("RUN_ONCE", "yes"),
+        ("IGNORE_LASTMOD", "yes"),
     ],
 )
 def test_rejects_invalid_option_values(base_env, name, value):
@@ -194,3 +198,10 @@ def test_unset_or_blank_optional_request_values_are_omitted(base_env):
     assert config.newsletter_address is None
     assert config.newsletter_site_name is None
     assert config.newsletter_base_url is None
+
+
+def test_ignore_lastmod_requires_one_shot_mode(base_env):
+    base_env["IGNORE_LASTMOD"] = "true"
+
+    with pytest.raises(ConfigError, match="requires RUN_ONCE=true"):
+        Config.from_env(base_env)

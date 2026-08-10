@@ -171,11 +171,64 @@ def _convert_html(html: str) -> str:  # noqa: C901
             del parent_tags
             label = _normalize_inline(text)
             destination = _tag_string(el, "href")
-            if destination is None:
-                return label
-            if not label:
-                return destination
-            return f"[{label}] ({destination})"
+            classes = _tag_classes(el)
+
+            if "footnote-backref" in classes or "lnlinks" in classes:
+                rendered = ""
+            elif "footnote-ref" in classes:
+                rendered = f"[{label}]" if label else ""
+            elif destination is None or destination.startswith("#"):
+                rendered = label
+            elif not label or label == destination:
+                rendered = destination
+            else:
+                rendered = f"[{label}] ({destination})"
+            return rendered
+
+        def convert_button(
+            self,
+            el: Any,
+            text: str,
+            parent_tags: set[str],
+        ) -> str:
+            del el, text, parent_tags
+            return ""
+
+        def convert_span(
+            self,
+            el: Any,
+            text: str,
+            parent_tags: set[str],
+        ) -> str:
+            del parent_tags
+            if "ln" in _tag_classes(el) or el.has_attr("data-code-status"):
+                return ""
+            return text
+
+        def convert_hr(
+            self,
+            el: Any,
+            text: str,
+            parent_tags: set[str],
+        ) -> str:
+            del text, parent_tags
+            if el.find_parent(class_="footnotes") is not None:
+                return ""
+            return "\n\n---\n\n"
+
+        def convert_iframe(
+            self,
+            el: Any,
+            text: str,
+            parent_tags: set[str],
+        ) -> str:
+            del text, parent_tags
+            source = _tag_string(el, "src")
+            if source is None:
+                return ""
+            title = _tag_string(el, "title") or "Embedded content"
+            kind = "Video" if _is_video_embed(source) else "Embedded content"
+            return f"\n\n[{kind}: {_normalize_inline(title)}] ({source})\n\n"
 
         def convert_img(
             self,
@@ -235,6 +288,20 @@ def _tag_string(tag: Any, key: str) -> str | None:
     return value.strip()
 
 
+def _tag_classes(tag: Any) -> frozenset[str]:
+    value = tag.get("class")
+    if isinstance(value, str):
+        return frozenset(value.split())
+    if isinstance(value, (list, tuple)):
+        return frozenset(item for item in value if isinstance(item, str))
+    return frozenset()
+
+
+def _is_video_embed(source: str) -> bool:
+    lowered = source.casefold()
+    return "youtube.com/" in lowered or "youtu.be/" in lowered
+
+
 def _byline(post: FeedPost, presentation: NewsletterPresentation) -> str:
     values: list[str] = []
     if presentation.author is not None:
@@ -273,7 +340,12 @@ def _normalize_inline(value: str) -> str:
 
 
 def _normalize_text(value: str) -> str:
-    normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = (
+        value.replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\u00a0", " ")
+        .replace("\u202f", " ")
+    )
     normalized = re.sub(r"[ \t]+\n", "\n", normalized)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
     return normalized.strip()
