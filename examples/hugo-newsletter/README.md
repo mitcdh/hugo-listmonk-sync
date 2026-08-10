@@ -7,9 +7,9 @@ feed-generation contract without depending on a separate site repository.
 The files under `layouts` implement the newsletter JSON output and its
 email-safe URL handling. `hugo.toml` is a minimal reusable configuration with
 an example `baseURL` and home output list. `content/posts/example.md` is a
-small fixture that exercises post selection, relative URL conversion,
-`srcset` conversion, and protection of Go template delimiters in displayed
-code.
+small fixture that exercises post selection, publication and modification
+timestamps, relative URL conversion, `srcset` conversion, and protection of Go
+template delimiters in displayed code.
 
 ## Layout
 
@@ -42,6 +42,11 @@ The generated feed contains only pages in the `posts` section whose front
 matter sets `newsletter: true`. Its rendered `html` field uses absolute asset
 and link URLs, while the top-level `image` field retains the front matter value
 for campaign-template metadata.
+
+Each post emits both `date` and `lastmod` as timezone-aware ISO 8601 values.
+Hugo defaults `.Lastmod` to the publication date when front matter does not set
+a later value, so unchanged posts initially have equal timestamps. The fixture
+sets an explicit later `lastmod` to make the distinction visible.
 
 The small `home.html` and `_default` HTML files only make this example
 independently buildable without a theme. Copy the newsletter layout and

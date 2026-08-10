@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import pytest
 
@@ -10,12 +11,20 @@ from hugo_listmonk_sync.listmonk import CampaignRef
 from hugo_listmonk_sync.reconcile import CycleSummary, Synchronizer
 
 
-def make_post(name="key", subject="Title") -> FeedPost:
+def make_post(name="key", subject="Title", lastmod=None) -> FeedPost:
+    attributes = {"key": name, "title": subject}
+    parsed_lastmod = None
+    if lastmod is not None:
+        attributes["lastmod"] = lastmod
+        parsed_lastmod = datetime.fromisoformat(lastmod)
     return FeedPost(
         name=name,
         subject=subject,
         content=f"<p>{subject}</p>",
-        attributes={"key": name, "title": subject},
+        attributes=attributes,
+        html=f"<p>{subject}</p>",
+        text=subject,
+        lastmod=parsed_lastmod,
     )
 
 
@@ -41,6 +50,8 @@ class StubListmonk:
     gets: list[int] = field(default_factory=list)
     creates: list[FeedPost] = field(default_factory=list)
     updates: list[tuple[int, dict, FeedPost]] = field(default_factory=list)
+    content_current: bool = True
+    current_checks: list[tuple[dict, FeedPost]] = field(default_factory=list)
 
     def list_campaigns(self):
         self.lists_called += 1
@@ -64,6 +75,10 @@ class StubListmonk:
         if post.name in self.failures.get("update", set()):
             raise ListmonkError("update failed")
         return {"id": campaign_id}
+
+    def generated_content_is_current(self, existing, post):
+        self.current_checks.append((existing, post))
+        return self.content_current
 
 
 def sync(feed, listmonk):
@@ -94,6 +109,172 @@ def test_one_draft_is_fetched_and_updated():
     assert summary == CycleSummary(updated=1)
     assert listmonk.gets == [7]
     assert [item[0] for item in listmonk.updates] == [7]
+
+
+def test_feed_without_lastmod_always_uses_previous_update_behavior():
+    feed = StubFeed((make_post(),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={
+            7: {
+                "id": 7,
+                "name": "key",
+                "status": "draft",
+                "attribs": {
+                    "post": {"lastmod": "2099-01-01T00:00:00Z"},
+                },
+            }
+        },
+        content_current=True,
+    )
+
+    summary = sync(feed, listmonk).run_cycle()
+
+    assert summary == CycleSummary(updated=1)
+    assert len(listmonk.updates) == 1
+    assert listmonk.current_checks == []
+
+
+def test_missing_existing_lastmod_forces_backfill_update():
+    feed = StubFeed((make_post(lastmod="2026-08-09T10:43:49Z"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={
+            7: {
+                "id": 7,
+                "name": "key",
+                "status": "draft",
+                "attribs": {"post": {"date": "2026-08-09T07:34:55Z"}},
+            }
+        },
+        content_current=True,
+    )
+
+    summary = sync(feed, listmonk).run_cycle()
+
+    assert summary == CycleSummary(updated=1)
+    assert len(listmonk.updates) == 1
+    assert listmonk.current_checks == []
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "not-a-timestamp",
+        "2026-08-09T10:43:49",
+        123,
+    ],
+)
+def test_malformed_existing_lastmod_forces_conservative_update(stored):
+    feed = StubFeed((make_post(lastmod="2026-08-09T10:43:49Z"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={
+            7: {
+                "id": 7,
+                "name": "key",
+                "status": "draft",
+                "attribs": {"post": {"lastmod": stored}},
+            }
+        },
+    )
+
+    summary = sync(feed, listmonk).run_cycle()
+
+    assert summary == CycleSummary(updated=1)
+    assert len(listmonk.updates) == 1
+
+
+def test_newer_feed_lastmod_updates_draft():
+    feed = StubFeed((make_post(lastmod="2026-08-09T10:43:50Z"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={
+            7: {
+                "id": 7,
+                "name": "key",
+                "status": "draft",
+                "attribs": {
+                    "post": {"lastmod": "2026-08-09T10:43:49Z"},
+                },
+            }
+        },
+    )
+
+    assert sync(feed, listmonk).run_cycle() == CycleSummary(updated=1)
+    assert len(listmonk.updates) == 1
+
+
+def test_equal_equivalent_offsets_and_current_content_are_up_to_date():
+    feed = StubFeed((make_post(lastmod="2026-08-09T20:43:49+10:00"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={
+            7: {
+                "id": 7,
+                "name": "key",
+                "status": "draft",
+                "attribs": {
+                    "post": {"lastmod": "2026-08-09T10:43:49Z"},
+                },
+            }
+        },
+        content_current=True,
+    )
+
+    summary = sync(feed, listmonk).run_cycle()
+
+    assert summary == CycleSummary(up_to_date=1)
+    assert listmonk.updates == []
+    assert len(listmonk.current_checks) == 1
+
+
+def test_equal_timestamp_with_stale_generated_content_updates():
+    feed = StubFeed((make_post(lastmod="2026-08-09T10:43:49Z"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={
+            7: {
+                "id": 7,
+                "name": "key",
+                "status": "draft",
+                "attribs": {
+                    "post": {"lastmod": "2026-08-09T10:43:49Z"},
+                },
+            }
+        },
+        content_current=False,
+    )
+
+    summary = sync(feed, listmonk).run_cycle()
+
+    assert summary == CycleSummary(updated=1)
+    assert len(listmonk.updates) == 1
+
+
+def test_older_feed_lastmod_warns_and_never_updates(caplog):
+    feed = StubFeed((make_post(lastmod="2026-08-09T10:43:48Z"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={
+            7: {
+                "id": 7,
+                "name": "key",
+                "status": "draft",
+                "attribs": {
+                    "post": {"lastmod": "2026-08-09T10:43:49Z"},
+                },
+            }
+        },
+        content_current=False,
+    )
+
+    summary = sync(feed, listmonk).run_cycle()
+
+    assert summary == CycleSummary(stale_feed_skipped=1)
+    assert listmonk.updates == []
+    assert listmonk.current_checks == []
+    assert "refusing rollback" in caplog.text
 
 
 @pytest.mark.parametrize(

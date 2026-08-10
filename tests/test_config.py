@@ -23,6 +23,11 @@ def test_parses_required_values_and_defaults(base_env):
     assert config.listmonk_template_id is None
     assert config.listmonk_from_email is None
     assert config.listmonk_campaign_tags == ()
+    assert config.newsletter_header_kicker == "NEW BLOG POST"
+    assert config.newsletter_author is None
+    assert config.newsletter_address is None
+    assert config.newsletter_site_name is None
+    assert config.newsletter_base_url is None
     assert config.poll_interval_seconds == 3600
     assert config.http_timeout_seconds == 30
     assert config.http_max_retries == 3
@@ -43,6 +48,11 @@ def test_parses_all_optional_values(base_env):
             "LISTMONK_TEMPLATE_ID": "8",
             "LISTMONK_FROM_EMAIL": " News <news@example.test> ",
             "LISTMONK_CAMPAIGN_TAGS": "hugo, newsletter",
+            "NEWSLETTER_HEADER_KICKER": "LATEST ARTICLE",
+            "NEWSLETTER_AUTHOR": " Publisher Name ",
+            "NEWSLETTER_ADDRESS": " Postal address ",
+            "NEWSLETTER_SITE_NAME": " Example Blog ",
+            "NEWSLETTER_BASE_URL": "https://blog.example.test/news",
             "POLL_INTERVAL_SECONDS": "15",
             "HTTP_TIMEOUT_SECONDS": "2.5",
             "HTTP_MAX_RETRIES": "0",
@@ -62,6 +72,11 @@ def test_parses_all_optional_values(base_env):
     assert config.listmonk_template_id == 8
     assert config.listmonk_from_email == "News <news@example.test>"
     assert config.listmonk_campaign_tags == ("hugo", "newsletter")
+    assert config.newsletter_header_kicker == "LATEST ARTICLE"
+    assert config.newsletter_author == "Publisher Name"
+    assert config.newsletter_address == "Postal address"
+    assert config.newsletter_site_name == "Example Blog"
+    assert config.newsletter_base_url == "https://blog.example.test/news"
     assert config.poll_interval_seconds == 15
     assert config.http_timeout_seconds == 2.5
     assert config.http_max_retries == 0
@@ -123,6 +138,9 @@ def test_rejects_invalid_numeric_values(base_env, name, value):
         ("NEWSLETTER_JSON_URL", "/newsletter.json"),
         ("NEWSLETTER_JSON_URL", "file:///feed.json"),
         ("NEWSLETTER_JSON_URL", "https://user:pass@example.test/feed"),
+        ("NEWSLETTER_BASE_URL", "/blog"),
+        ("NEWSLETTER_BASE_URL", "file:///blog"),
+        ("NEWSLETTER_BASE_URL", "https://user:pass@example.test/blog"),
         ("LISTMONK_BASE_URL", "listmonk.example"),
         ("LISTMONK_BASE_URL", "https://listmonk.example/api"),
         ("LISTMONK_BASE_URL", "https://listmonk.example?x=1"),
@@ -144,6 +162,7 @@ def test_rejects_invalid_urls(base_env, name, value):
         ("CAMPAIGN_SUBJECT_FIELD", ""),
         ("CAMPAIGN_CONTENT_FIELD", " "),
         ("LISTMONK_MESSENGER", ""),
+        ("NEWSLETTER_HEADER_KICKER", ""),
         ("LISTMONK_CAMPAIGN_TAGS", "one,,two"),
         ("LISTMONK_CONTENT_TYPE", "pdf"),
         ("LISTMONK_CAMPAIGN_TYPE", "transactional"),
@@ -161,9 +180,17 @@ def test_unset_or_blank_optional_request_values_are_omitted(base_env):
     base_env["LISTMONK_TEMPLATE_ID"] = " "
     base_env["LISTMONK_FROM_EMAIL"] = " "
     base_env["LISTMONK_CAMPAIGN_TAGS"] = " "
+    base_env["NEWSLETTER_AUTHOR"] = " "
+    base_env["NEWSLETTER_ADDRESS"] = " "
+    base_env["NEWSLETTER_SITE_NAME"] = " "
+    base_env["NEWSLETTER_BASE_URL"] = " "
 
     config = Config.from_env(base_env)
 
     assert config.listmonk_template_id is None
     assert config.listmonk_from_email is None
     assert config.listmonk_campaign_tags == ()
+    assert config.newsletter_author is None
+    assert config.newsletter_address is None
+    assert config.newsletter_site_name is None
+    assert config.newsletter_base_url is None

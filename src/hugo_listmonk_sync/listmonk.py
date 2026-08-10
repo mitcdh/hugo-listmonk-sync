@@ -12,6 +12,7 @@ from hugo_listmonk_sync.config import Config
 from hugo_listmonk_sync.errors import ListmonkError
 from hugo_listmonk_sync.feed import FeedPost
 from hugo_listmonk_sync.http import RetryingHttpClient
+from hugo_listmonk_sync.plaintext import PlainTextRenderer
 
 _UPDATE_FIELDS = (
     "lists",
@@ -19,7 +20,6 @@ _UPDATE_FIELDS = (
     "type",
     "content_type",
     "body_source",
-    "altbody",
     "send_at",
     "messenger",
     "template_id",
@@ -47,6 +47,7 @@ class ListmonkClient:
     ) -> None:
         self._http = http
         self._config = config
+        self._plaintext = PlainTextRenderer(config)
         self._campaigns_url = f"{config.listmonk_base_url}/api/campaigns"
 
     def list_campaigns(self) -> tuple[CampaignRef, ...]:
@@ -147,6 +148,7 @@ class ListmonkClient:
 
     def creation_payload(self, post: FeedPost) -> dict[str, Any]:
         """Build a Listmonk campaign creation request."""
+        presentation = self._plaintext.resolve_presentation(post)
         request: dict[str, Any] = {
             "name": post.name,
             "subject": post.subject,
@@ -154,8 +156,12 @@ class ListmonkClient:
             "type": self._config.listmonk_campaign_type,
             "content_type": self._config.listmonk_content_type,
             "body": post.content,
+            "altbody": self._plaintext.render(post, presentation),
             "messenger": self._config.listmonk_messenger,
-            "attribs": {"post": copy.deepcopy(post.attributes)},
+            "attribs": {
+                "post": copy.deepcopy(post.attributes),
+                "newsletter": presentation.as_attributes(),
+            },
         }
         if self._config.listmonk_template_id is not None:
             request["template_id"] = self._config.listmonk_template_id
@@ -165,8 +171,8 @@ class ListmonkClient:
             request["tags"] = list(self._config.listmonk_campaign_tags)
         return request
 
-    @staticmethod
     def update_payload(
+        self,
         existing: dict[str, Any],
         post: FeedPost,
     ) -> dict[str, Any]:
@@ -177,10 +183,12 @@ class ListmonkClient:
                 f"Campaign {campaign_id!r} is no longer a draft; refusing update"
             )
 
+        presentation = self._plaintext.resolve_presentation(post)
         request: dict[str, Any] = {
             "name": post.name,
             "subject": post.subject,
             "body": post.content,
+            "altbody": self._plaintext.render(post, presentation),
         }
         for field in _UPDATE_FIELDS:
             if field in existing:
@@ -202,8 +210,33 @@ class ListmonkClient:
             raise ListmonkError(f"Campaign {campaign_id!r} has malformed attribs")
         preserved_attribs = copy.deepcopy(attribs)
         preserved_attribs["post"] = copy.deepcopy(post.attributes)
+        preserved_attribs["newsletter"] = presentation.as_attributes()
         request["attribs"] = preserved_attribs
         return request
+
+    def generated_content_is_current(
+        self,
+        existing: dict[str, Any],
+        post: FeedPost,
+    ) -> bool:
+        """Return whether every synchronizer-owned field is current."""
+        presentation = self._plaintext.resolve_presentation(post)
+        expected = {
+            "name": post.name,
+            "subject": post.subject,
+            "body": post.content,
+            "altbody": self._plaintext.render(post, presentation),
+        }
+        if any(existing.get(key) != value for key, value in expected.items()):
+            return False
+
+        attribs = existing.get("attribs")
+        if not isinstance(attribs, dict):
+            return False
+        return (
+            attribs.get("post") == post.attributes
+            and attribs.get("newsletter") == presentation.as_attributes()
+        )
 
     def _request_json(
         self,

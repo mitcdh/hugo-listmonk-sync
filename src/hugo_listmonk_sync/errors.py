@@ -15,3 +15,7 @@ class FeedError(SyncError):
 
 class ListmonkError(SyncError):
     """Raised when a Listmonk operation fails or returns invalid data."""
+
+
+class PlainTextError(SyncError):
+    """Raised when a campaign plain-text body cannot be generated."""

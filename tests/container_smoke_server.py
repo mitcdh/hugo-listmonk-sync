@@ -30,6 +30,9 @@ class SmokeHandler(BaseHTTPRequestHandler):
                             "key": "container-smoke",
                             "title": "Container smoke test",
                             "html": "<p>It works.</p>",
+                            "text": "It works.",
+                            "date": "2026-08-09T07:34:55Z",
+                            "lastmod": "2026-08-09T07:34:55Z",
                             "readingTime": 1,
                         }
                     ],
@@ -47,7 +50,7 @@ class SmokeHandler(BaseHTTPRequestHandler):
             return
         self._json(HTTPStatus.NOT_FOUND, {"message": "not found"})
 
-    def do_POST(self) -> None:
+    def do_POST(self) -> None:  # noqa: PLR0911
         if urlsplit(self.path).path != "/api/campaigns":
             self._json(HTTPStatus.NOT_FOUND, {"message": "not found"})
             return
@@ -73,6 +76,17 @@ class SmokeHandler(BaseHTTPRequestHandler):
             "1 min read"
         ):
             self._json(HTTPStatus.BAD_REQUEST, {"message": "unexpected attributes"})
+            return
+        if "It works." not in payload.get("altbody", ""):
+            self._json(HTTPStatus.BAD_REQUEST, {"message": "missing altbody"})
+            return
+        if payload.get("attribs", {}).get("newsletter") != {
+            "headerKicker": "NEW BLOG POST"
+        }:
+            self._json(
+                HTTPStatus.BAD_REQUEST,
+                {"message": "unexpected newsletter attributes"},
+            )
             return
         type(self).created = True
         self._json(

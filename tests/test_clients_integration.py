@@ -21,12 +21,19 @@ def feed_payload():
                 "title": "New post",
                 "html": "<p>New</p>",
                 "text": "New",
+                "date": "2026-08-09T07:34:55Z",
+                "lastmod": "2026-08-09T07:34:55Z",
+                "url": "https://blog.example/posts/new-post/",
                 "readingTime": 3,
             },
             {
                 "key": "draft-post",
                 "title": "Revised draft",
                 "html": "<p>Revised</p>",
+                "text": "Revised",
+                "date": "2026-08-09T08:00:00Z",
+                "lastmod": "2026-08-09T10:43:49Z",
+                "url": "https://blog.example/posts/draft-post/",
                 "image": "/images/draft.webp",
             },
         ],
@@ -120,7 +127,13 @@ def test_full_http_reconciliation_cycle(config, make_retrying_http):
     assert created["lists"] == [4, 9]
     assert created["content_type"] == "html"
     assert created["body"] == "<p>New</p>"
+    assert "NEW BLOG POST" in created["altbody"]
+    assert "New post\n========" in created["altbody"]
+    assert "New\n\nREAD THE FULL POST" in created["altbody"]
+    assert "Unsubscribe: {{ UnsubscribeURL }}" in created["altbody"]
     assert created["attribs"]["post"]["readingTime"] == "3 min read"
+    assert created["attribs"]["post"]["lastmod"] == ("2026-08-09T07:34:55Z")
+    assert created["attribs"]["newsletter"] == {"headerKicker": "NEW BLOG POST"}
     assert "text" not in created["attribs"]["post"]
 
     updated = json.loads(update.calls[0].request.content)
@@ -131,14 +144,20 @@ def test_full_http_reconciliation_cycle(config, make_retrying_http):
     assert updated["from_email"] == "Kept <kept@example.test>"
     assert updated["template_id"] == 5
     assert updated["tags"] == ["keep"]
-    assert updated["altbody"] == "Keep me"
+    assert updated["altbody"] != "Keep me"
+    assert "Revised" in updated["altbody"]
+    assert "READ THE FULL POST" in updated["altbody"]
     assert updated["headers"] == [{"X-Keep": "yes"}]
     assert updated["attribs"]["tracking"] == "keep"
     assert updated["attribs"]["post"] == {
         "key": "draft-post",
         "title": "Revised draft",
+        "date": "2026-08-09T08:00:00Z",
+        "lastmod": "2026-08-09T10:43:49Z",
+        "url": "https://blog.example/posts/draft-post/",
         "image": "/images/draft.webp",
     }
+    assert updated["attribs"]["newsletter"] == {"headerKicker": "NEW BLOG POST"}
 
 
 @respx.mock
@@ -155,6 +174,28 @@ def test_invalid_feed_causes_no_listmonk_request(config, make_retrying_http):
     feed, listmonk = clients(config, make_retrying_http)
 
     with pytest.raises(FeedError, match="Duplicate"):
+        Synchronizer(feed, listmonk).run_cycle()
+
+    assert not list_route.called
+
+
+@respx.mock
+def test_malformed_feed_lastmod_causes_no_listmonk_request(
+    config,
+    make_retrying_http,
+):
+    payload = feed_payload()
+    payload["posts"][0]["lastmod"] = "2026-08-09T07:34:55"
+    respx.get(config.newsletter_json_url).mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+    list_route = respx.get(
+        "https://listmonk.example/api/campaigns",
+        params={"per_page": "all", "no_body": "true"},
+    )
+    feed, listmonk = clients(config, make_retrying_http)
+
+    with pytest.raises(FeedError, match="lastmod"):
         Synchronizer(feed, listmonk).run_cycle()
 
     assert not list_route.called

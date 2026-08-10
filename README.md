@@ -8,7 +8,8 @@ status.
 The service is deliberately limited:
 
 - It creates missing campaigns as drafts.
-- It updates the subject, body, and post metadata of matching drafts.
+- It updates synchronizer-owned campaign content only when a draft is stale.
+- It generates structured plain-text bodies alongside the HTML body.
 - It never sends, schedules, archives, deletes, or recreates campaigns.
 - It leaves sent and otherwise non-draft campaigns unchanged.
 
@@ -105,6 +106,7 @@ The example feed includes pages in the `posts` section whose front matter sets
 ---
 title: "Post title"
 date: 2025-01-01T12:00:00+10:00
+lastmod: 2025-01-02T09:30:00+10:00
 description: "A concise description used in the newsletter."
 image: "/images/my-post.webp"
 newsletter: true
@@ -166,7 +168,7 @@ Build the standalone example from the repository root:
 hugo --source examples/hugo-newsletter --gc --minify
 jq -e '.schemaVersion == 1 and (.posts | type == "array")' \
   examples/hugo-newsletter/public/newsletter.json
-jq '.posts[] | {key, title, url}' \
+jq '.posts[] | {key, title, date, lastmod, url}' \
   examples/hugo-newsletter/public/newsletter.json
 ```
 
@@ -174,7 +176,7 @@ After deploying your Hugo site, verify the public feed:
 
 ```sh
 curl --fail --silent --show-error https://blog.example.com/newsletter.json \
-  | jq '.posts[] | {key, title, url}'
+  | jq '.posts[] | {key, title, date, lastmod, url}'
 ```
 
 ## Feed contract
@@ -192,6 +194,7 @@ array:
       "title": "My post",
       "description": "A concise post description.",
       "date": "2025-01-01T12:00:00+10:00",
+      "lastmod": "2025-01-02T09:30:00+10:00",
       "readingTime": 8,
       "image": "/images/my-post.webp",
       "tags": ["Writing", "Technology"],
@@ -216,9 +219,20 @@ The synchronizer copies every top-level post field except `html` and `text`
 into `.Campaign.Attribs.post`. Arbitrary additional metadata is preserved. A
 numeric `readingTime` becomes `"<N> min read"`; an existing string is retained.
 
+`date` is the publication date and is used only for presentation. `lastmod` is
+the reconciliation version: when present, it must be a timezone-aware ISO 8601
+string. The synchronizer compares timestamp instants, not their string forms,
+and stores the original feed string unchanged. A feed without `lastmod` remains
+valid schema v1 and uses the previous always-update behavior.
+
+The `html` field is the source for the generated alternate body. The `text`
+field is retained only as a fallback when HTML conversion is unavailable or
+fails; neither large body is copied into campaign attributes.
+
 The complete feed is validated before any Listmonk mutation. Invalid JSON, an
-unsupported schema version, a missing selected field, or duplicate campaign
-names reject the entire cycle.
+unsupported schema version, a missing selected field, duplicate campaign
+names, or a present but malformed or timezone-naive `lastmod` reject the entire
+cycle.
 
 ## Reconciliation and safety
 
@@ -227,21 +241,40 @@ Campaign names are matched exactly and case-sensitively:
 | Matching campaigns | Action |
 | --- | --- |
 | None | Create a new draft. |
-| One draft | Refresh that draft from the feed. |
+| One draft | Apply the last-modified rules below. |
 | One non-draft | Leave it unchanged. |
 | Two or more | Treat the name as ambiguous and change none of them. |
 
-Draft updates replace only:
+For one matching draft, reconciliation uses these ordered rules:
+
+| Feed and campaign state | Action |
+| --- | --- |
+| Feed has no `lastmod` | Update using schema-v1 compatibility behavior. |
+| Campaign has no `attribs.post.lastmod` | Update and backfill it. |
+| Campaign's stored `lastmod` is malformed | Warn, update conservatively, and replace it. |
+| Feed instant is newer | Update. |
+| Instants are equal but generated content differs | Update and repair the generated fields. |
+| Instants are equal and generated content matches | Skip and count as `up_to_date`. |
+| Feed instant is older | Warn, skip, and count as `stale_feed_skipped`; never roll back. |
+
+`date` never participates in this comparison. Existing campaigns normally
+have `date` but no `lastmod`, so the first cycle after upgrading updates each
+matching draft once to backfill the timestamp and generated alternate body.
+
+Draft updates replace only synchronizer-owned fields:
 
 - campaign name
 - subject
-- body
+- HTML body
+- alternate body (`altbody`)
 - `attribs.post`
+- `attribs.newsletter`
 
 Existing lists, sender, template, tags, messenger, campaign and content types,
-body source, alternate body, headers, scheduled time, and unrelated campaign
-attributes are retained. Creation-only defaults never overwrite an existing
-draft. Campaigns absent from the feed are left alone.
+body source, headers, scheduled time, and unrelated campaign attributes are
+retained. Creation-only defaults never overwrite an existing draft. Campaigns
+absent from the feed are left alone. Manual edits to owned fields are replaced
+when reconciliation authorizes an update.
 
 The service never calls Listmonk's send, status, archive, or delete endpoints.
 It also rechecks a campaign's status immediately before updating it, avoiding
@@ -250,6 +283,34 @@ an update if the campaign left draft status during reconciliation.
 After the feed passes validation, posts are reconciled independently. A
 Listmonk error for one post is logged without preventing the remaining posts
 from being processed, and each cycle ends with an outcome summary.
+
+## Generated plain text
+
+Every created or updated campaign receives a generated `altbody`. It mirrors
+the logical order of `blog-updates.gohtml`: kicker, title, description,
+publisher/date/reading time, article, canonical post link, publisher details,
+and recipient links. Visual-only cover decoration, buttons, preheader padding,
+and tracking pixels are not reproduced.
+
+This is generated directly by the synchronizer; it does not depend on
+Listmonk's manual UI generator or a send-time conversion step.
+
+The HTML converter preserves headings, paragraphs, lists, blockquotes, and
+code blocks. Links use `[label] (destination)` and meaningful images use
+`[Image: alt text] (URL)`; images without alt text are treated as decorative.
+If HTML conversion fails, the feed's `text` field is used. A post with neither
+a usable conversion nor fallback fails without being mutated.
+
+The renderer keeps Listmonk's deliberate `{{ UnsubscribeURL }}` and
+`{{ MessageURL }}` expressions. Double braces originating in article text,
+displayed code, feed metadata, or configuration are emitted through safe
+literal template actions so they cannot become Listmonk expressions.
+
+Presentation values resolve in this order: a non-empty per-post feed value,
+then the matching environment default, then omission. The feed keys are
+`headerKicker`, `author`, `address`, `siteName`, and `baseURL`. Resolved values
+are stored in synchronizer-owned `.Campaign.Attribs.newsletter` for the bundled
+HTML template to consume as well.
 
 ## Listmonk setup
 
@@ -295,6 +356,11 @@ git-ignored `.env` file and never commit real credentials.
 | `LISTMONK_TEMPLATE_ID` | no | unset | Positive template ID for new campaigns; omitted when unset. |
 | `LISTMONK_FROM_EMAIL` | no | unset | Sender for new campaigns; omitted so Listmonk can use its default. |
 | `LISTMONK_CAMPAIGN_TAGS` | no | unset | Comma-separated tags applied only when creating campaigns. |
+| `NEWSLETTER_HEADER_KICKER` | no | `NEW BLOG POST` | Plain-text and bundled HTML header kicker. |
+| `NEWSLETTER_AUTHOR` | no | unset | Default publisher/author; omitted when neither config nor feed supplies it. |
+| `NEWSLETTER_ADDRESS` | no | unset | Default postal address; omitted when neither config nor feed supplies it. |
+| `NEWSLETTER_SITE_NAME` | no | unset | Default site name used in the plain-text site link and bundled HTML template. |
+| `NEWSLETTER_BASE_URL` | no | unset | Absolute HTTP(S) default site URL used in plain text and the bundled HTML template. |
 | `POLL_INTERVAL_SECONDS` | no | `3600` | Wait after each completed cycle, in seconds. |
 | `HTTP_TIMEOUT_SECONDS` | no | `30` | Positive request timeout; decimals are accepted. |
 | `HTTP_MAX_RETRIES` | no | `3` | Retry count after the initial safe request. |
@@ -319,11 +385,14 @@ path. There is no insecure TLS option.
 
 ## Campaign template
 
-Listmonk templates can read synchronized metadata through
-`.Campaign.Attribs.post`:
+Listmonk templates can read post metadata through `.Campaign.Attribs.post` and
+resolved shared presentation values through `.Campaign.Attribs.newsletter`:
 
 ```go-html-template
 {{ $assetBaseURL := "https://blog.example.com" }}
+{{ with .Campaign.Attribs.newsletter }}
+  <p>{{ .headerKicker }} · {{ .siteName }}</p>
+{{ end }}
 {{ with .Campaign.Attribs.post }}
   <h1>{{ .title }}</h1>
   <p>{{ .description }}</p>
@@ -345,10 +414,12 @@ Its opening `TEMPLATE SETTINGS` block separates:
 - date formats and font stacks
 - layout dimensions and colour palettes
 
-At minimum, replace `baseURL`, `siteName`, `publisherName`, `postalAddress`,
-and the logo settings. Set `assetBaseURL` separately when assets are served
-from a CDN. `showReadPostButton` controls the optional button beneath the
-campaign body.
+For synchronized campaigns, `baseURL`, `siteName`, `publisherName`,
+`postalAddress`, and `headerKicker` prefer `.Campaign.Attribs.newsletter`.
+Values in the opening settings block remain fallbacks for older or manually
+created campaigns. Logo and asset settings remain template-local; set
+`assetBaseURL` separately when assets are served from a CDN.
+`showReadPostButton` controls the optional button beneath the campaign body.
 
 Post links prefer the canonical `.Campaign.Attribs.post.url` value and fall
 back to `baseURL`, `postPath`, and the campaign name only when that metadata is
@@ -413,6 +484,10 @@ pytest suite before building the multi-platform image.
   environment-only configuration.
 - [`feed.py`](src/hugo_listmonk_sync/feed.py) retrieves and validates schema v1
   feeds.
+- [`plaintext.py`](src/hugo_listmonk_sync/plaintext.py) resolves shared
+  presentation values and generates structured alternate bodies.
+- [`timestamps.py`](src/hugo_listmonk_sync/timestamps.py) parses timezone-aware
+  ISO 8601 reconciliation timestamps.
 - [`listmonk.py`](src/hugo_listmonk_sync/listmonk.py) implements authenticated
   campaign API operations.
 - [`reconcile.py`](src/hugo_listmonk_sync/reconcile.py) applies matching and

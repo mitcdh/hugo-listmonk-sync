@@ -14,6 +14,8 @@ def post() -> FeedPost:
         name="post-key",
         subject="Post title",
         content="<p>Post body</p>",
+        html="<p>Post body</p>",
+        text="Post body",
         attributes={
             "key": "post-key",
             "title": "Post title",
@@ -52,6 +54,16 @@ def test_creation_payload_uses_configured_defaults_and_omits_unset(
         "type": "regular",
         "content_type": "html",
         "body": "<p>Post body</p>",
+        "altbody": (
+            "NEW BLOG POST\n\n"
+            "Post title\n==========\n\n"
+            "5 min read\n\n"
+            "----------------------------------------------------------------\n\n"
+            "Post body\n\n"
+            "----------------------------------------------------------------\n\n"
+            "Unsubscribe: {{ UnsubscribeURL }}\n"
+            "View online: {{ MessageURL }}\n"
+        ),
         "messenger": "email",
         "attribs": {
             "post": {
@@ -59,7 +71,8 @@ def test_creation_payload_uses_configured_defaults_and_omits_unset(
                 "title": "Post title",
                 "image": "",
                 "readingTime": "5 min read",
-            }
+            },
+            "newsletter": {"headerKicker": "NEW BLOG POST"},
         },
     }
     assert "template_id" not in payload
@@ -85,7 +98,10 @@ def test_creation_payload_includes_configured_optional_fields(
     assert payload["tags"] == ["hugo", "news"]
 
 
-def test_update_payload_preserves_all_non_feed_settings_and_other_attribs():
+def test_update_payload_preserves_all_non_feed_settings_and_other_attribs(
+    config,
+    make_retrying_http,
+):
     existing = {
         "id": 41,
         "name": "post-key",
@@ -110,7 +126,9 @@ def test_update_payload_preserves_all_non_feed_settings_and_other_attribs():
         "created_at": "read-only and not sent",
     }
 
-    payload = ListmonkClient.update_payload(existing, post())
+    listmonk = client(config, make_retrying_http)
+
+    payload = listmonk.update_payload(existing, post())
 
     assert payload == {
         "name": "post-key",
@@ -121,7 +139,16 @@ def test_update_payload_preserves_all_non_feed_settings_and_other_attribs():
         "type": "optin",
         "content_type": "markdown",
         "body_source": {"blocks": ["unchanged"]},
-        "altbody": "Existing alternate body",
+        "altbody": (
+            "NEW BLOG POST\n\n"
+            "Post title\n==========\n\n"
+            "5 min read\n\n"
+            "----------------------------------------------------------------\n\n"
+            "Post body\n\n"
+            "----------------------------------------------------------------\n\n"
+            "Unsubscribe: {{ UnsubscribeURL }}\n"
+            "View online: {{ MessageURL }}\n"
+        ),
         "send_at": "2026-08-01T00:00:00Z",
         "messenger": "custom",
         "template_id": 13,
@@ -135,13 +162,17 @@ def test_update_payload_preserves_all_non_feed_settings_and_other_attribs():
                 "image": "",
                 "readingTime": "5 min read",
             },
+            "newsletter": {"headerKicker": "NEW BLOG POST"},
         },
     }
     assert existing["attribs"]["post"] == {"key": "old", "stale": True}
     assert "created_at" not in payload
 
 
-def test_update_payload_accepts_list_ids_already_in_request_shape():
+def test_update_payload_accepts_list_ids_already_in_request_shape(
+    config,
+    make_retrying_http,
+):
     existing = {
         "id": 1,
         "status": "draft",
@@ -149,7 +180,7 @@ def test_update_payload_accepts_list_ids_already_in_request_shape():
         "attribs": {},
     }
 
-    payload = ListmonkClient.update_payload(existing, post())
+    payload = client(config, make_retrying_http).update_payload(existing, post())
 
     assert payload["lists"] == [4, 9]
 
@@ -163,7 +194,11 @@ def test_update_payload_accepts_list_ids_already_in_request_shape():
         {"attribs": []},
     ],
 )
-def test_update_payload_rejects_unsafe_or_malformed_campaign(change):
+def test_update_payload_rejects_unsafe_or_malformed_campaign(
+    change,
+    config,
+    make_retrying_http,
+):
     existing = {
         "id": 1,
         "status": "draft",
@@ -173,7 +208,41 @@ def test_update_payload_rejects_unsafe_or_malformed_campaign(change):
     existing.update(change)
 
     with pytest.raises(ListmonkError):
-        ListmonkClient.update_payload(existing, post())
+        client(config, make_retrying_http).update_payload(existing, post())
+
+
+def test_generated_content_current_compares_all_owned_fields(
+    config,
+    make_retrying_http,
+):
+    listmonk = client(config, make_retrying_http)
+    desired = listmonk.update_payload(
+        {
+            "id": 1,
+            "status": "draft",
+            "lists": [4],
+            "attribs": {"unrelated": "kept"},
+        },
+        post(),
+    )
+
+    assert listmonk.generated_content_is_current(desired, post())
+
+    for field in ("subject", "body", "altbody"):
+        stale = dict(desired)
+        stale[field] = "stale"
+        assert not listmonk.generated_content_is_current(stale, post())
+
+    missing_altbody = dict(desired)
+    del missing_altbody["altbody"]
+    assert not listmonk.generated_content_is_current(missing_altbody, post())
+
+    stale_attribs = dict(desired)
+    stale_attribs["attribs"] = {
+        **desired["attribs"],
+        "newsletter": {"headerKicker": "STALE"},
+    }
+    assert not listmonk.generated_content_is_current(stale_attribs, post())
 
 
 @respx.mock
