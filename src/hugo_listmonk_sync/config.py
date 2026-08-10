@@ -39,6 +39,11 @@ class Config:
     listmonk_template_id: int | None = None
     listmonk_from_email: str | None = None
     listmonk_campaign_tags: tuple[str, ...] = ()
+    newsletter_header_kicker: str = "NEW BLOG POST"
+    newsletter_author: str | None = None
+    newsletter_address: str | None = None
+    newsletter_site_name: str | None = None
+    newsletter_base_url: str | None = None
     poll_interval_seconds: int = 3600
     http_timeout_seconds: float = 30.0
     http_max_retries: int = 3
@@ -84,6 +89,21 @@ class Config:
         template_id = _optional_positive_int(env, "LISTMONK_TEMPLATE_ID")
         from_email = _optional_nonempty(env, "LISTMONK_FROM_EMAIL")
         tags = _parse_optional_csv(env.get("LISTMONK_CAMPAIGN_TAGS"), "tags")
+        header_kicker = _nonempty(
+            env,
+            "NEWSLETTER_HEADER_KICKER",
+            "NEW BLOG POST",
+        )
+        author = _optional_nonempty(env, "NEWSLETTER_AUTHOR")
+        address = _optional_nonempty(env, "NEWSLETTER_ADDRESS")
+        site_name = _optional_nonempty(env, "NEWSLETTER_SITE_NAME")
+        newsletter_base_url = _optional_nonempty(env, "NEWSLETTER_BASE_URL")
+        if newsletter_base_url is not None:
+            _validate_url(
+                newsletter_base_url,
+                "NEWSLETTER_BASE_URL",
+                origin_only=False,
+            )
         poll_interval = _positive_int(env, "POLL_INTERVAL_SECONDS", 3600)
         timeout = _positive_float(env, "HTTP_TIMEOUT_SECONDS", 30.0)
         max_retries = _nonnegative_int(env, "HTTP_MAX_RETRIES", 3)
@@ -108,6 +128,11 @@ class Config:
             listmonk_template_id=template_id,
             listmonk_from_email=from_email,
             listmonk_campaign_tags=tags,
+            newsletter_header_kicker=header_kicker,
+            newsletter_author=author,
+            newsletter_address=address,
+            newsletter_site_name=site_name,
+            newsletter_base_url=newsletter_base_url,
             poll_interval_seconds=poll_interval,
             http_timeout_seconds=timeout,
             http_max_retries=max_retries,

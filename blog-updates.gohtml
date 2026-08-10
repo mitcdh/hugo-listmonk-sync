@@ -32,6 +32,19 @@ Edit the values in this section to customise the template.
 {{ $metadataSeparator := "·" }}
 {{ $footerLinkSeparator := "•" }}
 
+{{- /*
+Values synchronized into Campaign.Attribs.newsletter override the identity and
+copy defaults above. The settings remain as fallbacks for older and manually
+created campaigns.
+*/ -}}
+{{ with .Campaign.Attribs.newsletter }}
+  {{ with .baseURL }}{{ $baseURL = . }}{{ end }}
+  {{ with .siteName }}{{ $siteName = . }}{{ end }}
+  {{ with .author }}{{ $publisherName = . }}{{ end }}
+  {{ with .address }}{{ $postalAddress = . }}{{ end }}
+  {{ with .headerKicker }}{{ $headerKicker = . }}{{ end }}
+{{ end }}
+
 {{- /* Date parsing and display */ -}}
 {{ $dateInputLayout := "2006-01-02T15:04:05Z07:00" }}
 {{ $dateDisplayLayout := "2 January 2006" }}
@@ -101,9 +114,17 @@ these values into both style blocks and inline styles.
 {{- /*
 Campaign Attributes example:
 {
+  "newsletter": {
+    "headerKicker": "New blog post",
+    "author": "Your Name",
+    "address": "Your postal address",
+    "siteName": "Example Blog",
+    "baseURL": "https://blog.example.com"
+  },
   "post": {
     "title": "Example post title",
     "date": "2026-07-18T00:00:00+10:00",
+    "lastmod": "2026-07-18T02:30:00+10:00",
     "description": "Post description",
     "image": "/images/example.webp",
     "readingTime": "12 min read",

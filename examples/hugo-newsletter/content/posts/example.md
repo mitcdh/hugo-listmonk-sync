@@ -1,6 +1,7 @@
 ---
 title: "Newsletter feed example"
 date: 2025-01-01T12:00:00+10:00
+lastmod: 2025-01-02T09:30:00+10:00
 description: "A fixture that exercises the Hugo newsletter feed."
 image: "/images/newsletter-example.webp"
 newsletter: true

@@ -5,12 +5,14 @@ from __future__ import annotations
 import copy
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import httpx
 
 from hugo_listmonk_sync.errors import FeedError
 from hugo_listmonk_sync.http import RetryingHttpClient
+from hugo_listmonk_sync.timestamps import parse_aware_iso8601
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +23,9 @@ class FeedPost:
     subject: str
     content: str
     attributes: dict[str, Any]
+    html: str | None = None
+    text: str | None = None
+    lastmod: datetime | None = None
 
 
 def validate_feed(
@@ -56,6 +61,9 @@ def validate_feed(
                 subject=subject,
                 content=content,
                 attributes=_post_attributes(raw_post),
+                html=_optional_string(raw_post.get("html")),
+                text=_optional_string(raw_post.get("text")),
+                lastmod=_lastmod(raw_post, index),
             )
         )
     return tuple(posts)
@@ -126,3 +134,27 @@ def _post_attributes(post: Mapping[str, object]) -> dict[str, Any]:
     if isinstance(reading_time, (int, float)) and not isinstance(reading_time, bool):
         attributes["readingTime"] = f"{reading_time:g} min read"
     return attributes
+
+
+def _optional_string(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value
+
+
+def _lastmod(post: Mapping[str, object], index: int) -> datetime | None:
+    if "lastmod" not in post:
+        return None
+    value = post["lastmod"]
+    if not isinstance(value, str):
+        raise FeedError(
+            f"Feed post at index {index} field 'lastmod' must be a "
+            "timezone-aware ISO 8601 string"
+        )
+    try:
+        return parse_aware_iso8601(value)
+    except ValueError as exc:
+        raise FeedError(
+            f"Feed post at index {index} field 'lastmod' must be a "
+            "timezone-aware ISO 8601 string"
+        ) from exc
