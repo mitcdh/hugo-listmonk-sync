@@ -49,6 +49,7 @@ class Config:
     http_max_retries: int = 3
     log_level: str = "INFO"
     run_once: bool = False
+    ignore_lastmod: bool = False
 
     @property
     def numeric_log_level(self) -> int:
@@ -112,6 +113,9 @@ class Config:
             choices = ", ".join(_LOG_LEVELS)
             raise ConfigError(f"LOG_LEVEL must be one of: {choices}")
         run_once = _boolean(env, "RUN_ONCE", False)
+        ignore_lastmod = _boolean(env, "IGNORE_LASTMOD", False)
+        if ignore_lastmod and not run_once:
+            raise ConfigError("IGNORE_LASTMOD=true requires RUN_ONCE=true")
 
         return cls(
             newsletter_json_url=newsletter_url,
@@ -138,6 +142,7 @@ class Config:
             http_max_retries=max_retries,
             log_level=log_level,
             run_once=run_once,
+            ignore_lastmod=ignore_lastmod,
         )
 
 

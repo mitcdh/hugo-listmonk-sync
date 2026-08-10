@@ -81,8 +81,8 @@ class StubListmonk:
         return self.content_current
 
 
-def sync(feed, listmonk):
-    return Synchronizer(feed, listmonk)
+def sync(feed, listmonk, *, ignore_lastmod=False):
+    return Synchronizer(feed, listmonk, ignore_lastmod=ignore_lastmod)
 
 
 def test_missing_campaign_is_created():
@@ -275,6 +275,57 @@ def test_older_feed_lastmod_warns_and_never_updates(caplog):
     assert listmonk.updates == []
     assert listmonk.current_checks == []
     assert "refusing rollback" in caplog.text
+
+
+def test_ignore_lastmod_forces_older_feed_update_for_matching_draft(caplog):
+    feed = StubFeed((make_post(lastmod="2026-08-09T10:43:48Z"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={
+            7: {
+                "id": 7,
+                "name": "key",
+                "status": "draft",
+                "attribs": {
+                    "post": {"lastmod": "2026-08-09T10:43:49Z"},
+                },
+            }
+        },
+        content_current=True,
+    )
+
+    summary = sync(feed, listmonk, ignore_lastmod=True).run_cycle()
+
+    assert summary == CycleSummary(updated=1)
+    assert len(listmonk.updates) == 1
+    assert listmonk.current_checks == []
+    assert "IGNORE_LASTMOD is enabled" in caplog.text
+
+
+def test_ignore_lastmod_does_not_change_non_draft_campaign():
+    feed = StubFeed((make_post(lastmod="2026-08-09T10:43:48Z"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "sent"),),
+    )
+
+    summary = sync(feed, listmonk, ignore_lastmod=True).run_cycle()
+
+    assert summary == CycleSummary(non_draft_skipped=1)
+    assert listmonk.gets == []
+    assert listmonk.updates == []
+
+
+def test_ignore_lastmod_does_not_bypass_draft_status_race():
+    feed = StubFeed((make_post(lastmod="2026-08-09T10:43:48Z"),))
+    listmonk = StubListmonk(
+        campaigns=(CampaignRef(7, "key", "draft"),),
+        full={7: {"id": 7, "name": "key", "status": "scheduled"}},
+    )
+
+    summary = sync(feed, listmonk, ignore_lastmod=True).run_cycle()
+
+    assert summary == CycleSummary(non_draft_skipped=1)
+    assert listmonk.updates == []
 
 
 @pytest.mark.parametrize(

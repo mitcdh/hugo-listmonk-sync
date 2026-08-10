@@ -73,7 +73,11 @@ def main() -> int:
         )
         service = ServiceLoop(
             config,
-            Synchronizer(feed, listmonk),
+            Synchronizer(
+                feed,
+                listmonk,
+                ignore_lastmod=config.ignore_lastmod,
+            ),
             stop_event=stop_event,
         )
         restore_handlers = install_signal_handlers(stop_event)

@@ -280,6 +280,28 @@ The service never calls Listmonk's send, status, archive, or delete endpoints.
 It also rechecks a campaign's status immediately before updating it, avoiding
 an update if the campaign left draft status during reconciliation.
 
+### One-shot timestamp override
+
+Generated-field differences already cause an update when feed and campaign
+timestamps are equal. For an exceptional repair where timestamp comparison
+must be bypassed, run one cycle with both `RUN_ONCE=true` and
+`IGNORE_LASTMOD=true`. The override changes only the decision for one exact
+matching draft: non-drafts, ambiguous matches, and campaigns that leave draft
+status during reconciliation remain unchanged. Feed validation also remains
+active, including rejection of a malformed `lastmod`.
+
+The override can replace a draft whose stored timestamp is newer than the
+feed, including replacing its stored `attribs.post.lastmod` with the original
+feed value. It should therefore be used deliberately and never configured on
+the continuous service. For a standalone container using an environment file:
+
+```sh
+docker run --rm --env-file .env \
+  --env RUN_ONCE=true \
+  --env IGNORE_LASTMOD=true \
+  ghcr.io/mitcdh/hugo-listmonk-sync:latest
+```
+
 After the feed passes validation, posts are reconciled independently. A
 Listmonk error for one post is logged without preventing the remaining posts
 from being processed, and each cycle ends with an outcome summary.
@@ -295,9 +317,18 @@ and tracking pixels are not reproduced.
 This is generated directly by the synchronizer; it does not depend on
 Listmonk's manual UI generator or a send-time conversion step.
 
-The HTML converter preserves headings, paragraphs, lists, blockquotes, and
-code blocks. Links use `[label] (destination)` and meaningful images use
-`[Image: alt text] (URL)`; images without alt text are treated as decorative.
+The HTML converter preserves headings, paragraphs, lists, blockquotes, tables,
+and readable code blocks. Links use `[label] (destination)` and meaningful
+images use `[Image: alt text] (URL)`; images without alt text are treated as
+decorative. A link whose label is already its URL is emitted once. Embedded
+video frames become labelled destination links instead of disappearing.
+
+Web-only code controls, code-line anchors, hidden status text, footnote return
+links, and redundant footnote separators are omitted. Footnote references keep
+their labels, such as `[5]`, while the references remain an ordered list with
+their external source links. Internal fragment destinations such as `#fn:5`
+are not emitted because a plain-text MIME part has no corresponding anchors.
+
 If HTML conversion fails, the feed's `text` field is used. A post with neither
 a usable conversion nor fallback fails without being mutated.
 
@@ -366,10 +397,13 @@ git-ignored `.env` file and never commit real credentials.
 | `HTTP_MAX_RETRIES` | no | `3` | Retry count after the initial safe request. |
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`. |
 | `RUN_ONCE` | no | `false` | Run one immediate cycle and exit. |
+| `IGNORE_LASTMOD` | no | `false` | Force owned-field updates for exact matching drafts; requires `RUN_ONCE=true`. |
 
 Continuous mode waits only after a cycle completes, so slow cycles never
 overlap. `RUN_ONCE=true` runs one cycle and exits, which is useful when an
-external scheduler owns the cadence.
+external scheduler owns the cadence. `IGNORE_LASTMOD=true` is rejected unless
+one-shot mode is also enabled, preventing a persistent service from silently
+disabling timestamp reconciliation.
 
 Feed GETs and Listmonk GET/PUTs retry HTTP 429 responses, transient 5xx
 responses, and network failures with bounded exponential backoff and
