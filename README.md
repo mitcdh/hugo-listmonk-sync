@@ -311,6 +311,11 @@ Set `LISTMONK_TEMPLATE_ID` to that template's numeric ID if new campaigns
 should use it automatically. Existing drafts keep whichever Listmonk template
 they already use.
 
+`NEWSLETTER_SUBJECT_PREFIX` adds text only to the email subject. For example,
+`NEWSLETTER_SUBJECT_PREFIX=[blog.mitcdh]` produces the subject
+`[blog.mitcdh] Post title`. It does not change the title shown inside the HTML
+or plain-text email. One separating space is added automatically.
+
 These optional settings are shared by the generated plain text and the bundled
 HTML template:
 
@@ -364,6 +369,12 @@ existing draft's Listmonk settings.
 | `CAMPAIGN_NAME_FIELD` | `key` | Feed field used as the campaign name. |
 | `CAMPAIGN_SUBJECT_FIELD` | `title` | Feed field used as the subject. |
 | `CAMPAIGN_CONTENT_FIELD` | `html` | Feed field used as the campaign body. |
+
+### Email subject
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `NEWSLETTER_SUBJECT_PREFIX` | unset | Text placed before the email subject. One separating space is added automatically. |
 
 ### Newsletter presentation
 

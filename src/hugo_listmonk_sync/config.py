@@ -39,6 +39,7 @@ class Config:
     listmonk_template_id: int | None = None
     listmonk_from_email: str | None = None
     listmonk_campaign_tags: tuple[str, ...] = ()
+    newsletter_subject_prefix: str | None = None
     newsletter_header_kicker: str = "NEW BLOG POST"
     newsletter_author: str | None = None
     newsletter_address: str | None = None
@@ -90,6 +91,7 @@ class Config:
         template_id = _optional_positive_int(env, "LISTMONK_TEMPLATE_ID")
         from_email = _optional_nonempty(env, "LISTMONK_FROM_EMAIL")
         tags = _parse_optional_csv(env.get("LISTMONK_CAMPAIGN_TAGS"), "tags")
+        subject_prefix = _optional_nonempty(env, "NEWSLETTER_SUBJECT_PREFIX")
         header_kicker = _nonempty(
             env,
             "NEWSLETTER_HEADER_KICKER",
@@ -132,6 +134,7 @@ class Config:
             listmonk_template_id=template_id,
             listmonk_from_email=from_email,
             listmonk_campaign_tags=tags,
+            newsletter_subject_prefix=subject_prefix,
             newsletter_header_kicker=header_kicker,
             newsletter_author=author,
             newsletter_address=address,

@@ -23,6 +23,7 @@ def test_parses_required_values_and_defaults(base_env):
     assert config.listmonk_template_id is None
     assert config.listmonk_from_email is None
     assert config.listmonk_campaign_tags == ()
+    assert config.newsletter_subject_prefix is None
     assert config.newsletter_header_kicker == "NEW BLOG POST"
     assert config.newsletter_author is None
     assert config.newsletter_address is None
@@ -49,6 +50,7 @@ def test_parses_all_optional_values(base_env):
             "LISTMONK_TEMPLATE_ID": "8",
             "LISTMONK_FROM_EMAIL": " News <news@example.test> ",
             "LISTMONK_CAMPAIGN_TAGS": "hugo, newsletter",
+            "NEWSLETTER_SUBJECT_PREFIX": " [blog.example] ",
             "NEWSLETTER_HEADER_KICKER": "LATEST ARTICLE",
             "NEWSLETTER_AUTHOR": " Publisher Name ",
             "NEWSLETTER_ADDRESS": " Postal address ",
@@ -74,6 +76,7 @@ def test_parses_all_optional_values(base_env):
     assert config.listmonk_template_id == 8
     assert config.listmonk_from_email == "News <news@example.test>"
     assert config.listmonk_campaign_tags == ("hugo", "newsletter")
+    assert config.newsletter_subject_prefix == "[blog.example]"
     assert config.newsletter_header_kicker == "LATEST ARTICLE"
     assert config.newsletter_author == "Publisher Name"
     assert config.newsletter_address == "Postal address"
@@ -185,6 +188,7 @@ def test_unset_or_blank_optional_request_values_are_omitted(base_env):
     base_env["LISTMONK_FROM_EMAIL"] = " "
     base_env["LISTMONK_CAMPAIGN_TAGS"] = " "
     base_env["NEWSLETTER_AUTHOR"] = " "
+    base_env["NEWSLETTER_SUBJECT_PREFIX"] = " "
     base_env["NEWSLETTER_ADDRESS"] = " "
     base_env["NEWSLETTER_SITE_NAME"] = " "
     base_env["NEWSLETTER_BASE_URL"] = " "
@@ -194,6 +198,7 @@ def test_unset_or_blank_optional_request_values_are_omitted(base_env):
     assert config.listmonk_template_id is None
     assert config.listmonk_from_email is None
     assert config.listmonk_campaign_tags == ()
+    assert config.newsletter_subject_prefix is None
     assert config.newsletter_author is None
     assert config.newsletter_address is None
     assert config.newsletter_site_name is None

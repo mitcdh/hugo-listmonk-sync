@@ -104,6 +104,36 @@ def test_creation_payload_includes_configured_optional_fields(
     assert payload["tags"] == ["hugo", "news"]
 
 
+def test_subject_prefix_only_changes_campaign_subject(
+    make_config,
+    make_retrying_http,
+):
+    config = make_config(newsletter_subject_prefix=" [blog.mitcdh] ")
+    listmonk = client(config, make_retrying_http)
+
+    creation = listmonk.creation_payload(post())
+    update = listmonk.update_payload(
+        {
+            "id": 1,
+            "status": "draft",
+            "lists": [4],
+            "attribs": {},
+        },
+        post(),
+    )
+
+    assert creation["subject"] == "[blog.mitcdh] Post title"
+    assert update["subject"] == "[blog.mitcdh] Post title"
+    assert creation["attribs"]["post"]["title"] == "Post title"
+    assert update["attribs"]["post"]["title"] == "Post title"
+    assert "[blog.mitcdh]" not in creation["altbody"]
+    assert "[blog.mitcdh]" not in creation["body"]
+    assert listmonk.generated_content_is_current(update, post())
+
+    stale_subject = {**update, "subject": "Post title"}
+    assert not listmonk.generated_content_is_current(stale_subject, post())
+
+
 def test_html_body_is_email_sanitized_on_create_and_currentness_check(
     config,
     make_retrying_http,

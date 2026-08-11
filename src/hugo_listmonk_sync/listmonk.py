@@ -153,7 +153,7 @@ class ListmonkClient:
         presentation = self._plaintext.resolve_presentation(post)
         request: dict[str, Any] = {
             "name": post.name,
-            "subject": post.subject,
+            "subject": self._campaign_subject(post),
             "lists": list(self._config.listmonk_list_ids),
             "type": self._config.listmonk_campaign_type,
             "content_type": self._config.listmonk_content_type,
@@ -191,7 +191,7 @@ class ListmonkClient:
         presentation = self._plaintext.resolve_presentation(post)
         request: dict[str, Any] = {
             "name": post.name,
-            "subject": post.subject,
+            "subject": self._campaign_subject(post),
             "altbody": self._plaintext.render(post, presentation),
         }
         for field in _UPDATE_FIELDS:
@@ -234,7 +234,7 @@ class ListmonkClient:
         content_type = existing.get("content_type")
         expected = {
             "name": post.name,
-            "subject": post.subject,
+            "subject": self._campaign_subject(post),
             "body": self._htmlbody.render(
                 post,
                 content_type if isinstance(content_type, str) else "",
@@ -251,6 +251,12 @@ class ListmonkClient:
             attribs.get("post") == post.attributes
             and attribs.get("newsletter") == presentation.as_attributes()
         )
+
+    def _campaign_subject(self, post: FeedPost) -> str:
+        prefix = self._config.newsletter_subject_prefix
+        if prefix is None or not prefix.strip():
+            return post.subject
+        return f"{prefix.strip()} {post.subject}"
 
     def _request_json(
         self,
