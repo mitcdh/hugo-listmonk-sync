@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import re
 from dataclasses import dataclass
@@ -11,10 +12,15 @@ from hugo_listmonk_sync.config import Config
 from hugo_listmonk_sync.errors import PlainTextError
 from hugo_listmonk_sync.feed import FeedPost
 from hugo_listmonk_sync.timestamps import parse_aware_iso8601
+from hugo_listmonk_sync.urls import resolve_content_url
 
 logger = logging.getLogger(__name__)
 
 _DIVIDER = "-" * 64
+_TABLE_MAX_WIDTH = 80
+_TABLE_OMITTED = (
+    "Table omitted: it exceeds 80 characters per line. See the full article."
+)
 _OPEN_TEMPLATE_LITERAL = r'{{ printf "\x7b\x7b" }}'
 _CLOSE_TEMPLATE_LITERAL = r'{{ printf "\x7d\x7d" }}'
 
@@ -127,7 +133,10 @@ class PlainTextRenderer:
     def _article_body(post: FeedPost) -> str:
         if post.html is not None:
             try:
-                converted = _convert_html(post.html)
+                converted = _convert_html(
+                    post.html,
+                    base_url=_attribute_string(post, "url"),
+                )
             except _HtmlConversionError as exc:
                 logger.warning(
                     "Could not convert HTML for campaign %r; using feed text: %s",
@@ -153,7 +162,7 @@ class _HtmlConversionError(Exception):
     """Internal wrapper for converter availability and execution failures."""
 
 
-def _convert_html(html: str) -> str:  # noqa: C901
+def _convert_html(html: str, *, base_url: str | None = None) -> str:  # noqa: C901
     try:
         from markdownify import MarkdownConverter  # noqa: PLC0415
     except ImportError as exc:
@@ -170,20 +179,31 @@ def _convert_html(html: str) -> str:  # noqa: C901
         ) -> str:
             del parent_tags
             label = _normalize_inline(text)
-            destination = _tag_string(el, "href")
+            original_destination = _tag_string(el, "href")
             classes = _tag_classes(el)
 
             if "footnote-backref" in classes or "lnlinks" in classes:
                 rendered = ""
             elif "footnote-ref" in classes:
                 rendered = f"[{label}]" if label else ""
-            elif destination is None or destination.startswith("#"):
+            elif original_destination is None or original_destination.startswith("#"):
                 rendered = label
-            elif not label or label == destination:
-                rendered = destination
             else:
-                rendered = f"[{label}] ({destination})"
+                destination = resolve_content_url(original_destination, base_url)
+                if not label or label in {original_destination, destination}:
+                    rendered = destination
+                else:
+                    rendered = f"{label}: {destination}"
             return rendered
+
+        def convert_table(
+            self,
+            el: Any,
+            text: str,
+            parent_tags: set[str],
+        ) -> str:
+            del text
+            return _render_table(self, el, parent_tags)
 
         def convert_button(
             self,
@@ -226,9 +246,10 @@ def _convert_html(html: str) -> str:  # noqa: C901
             source = _tag_string(el, "src")
             if source is None:
                 return ""
+            source = resolve_content_url(source, base_url)
             title = _tag_string(el, "title") or "Embedded content"
             kind = "Video" if _is_video_embed(source) else "Embedded content"
-            return f"\n\n[{kind}: {_normalize_inline(title)}] ({source})\n\n"
+            return f"\n\n{kind}: {_normalize_inline(title)} — {source}\n\n"
 
         def convert_img(
             self,
@@ -242,8 +263,9 @@ def _convert_html(html: str) -> str:  # noqa: C901
                 return ""
             source = _tag_string(el, "src")
             if source is None:
-                return f"[Image: {alt}]"
-            return f"[Image: {alt}] ({source})"
+                return f"Image: {alt}"
+            source = resolve_content_url(source, base_url)
+            return f"Image: {alt} — {source}"
 
         def convert_script(
             self,
@@ -272,6 +294,93 @@ def _convert_html(html: str) -> str:  # noqa: C901
     except Exception as exc:
         raise _HtmlConversionError(str(exc) or type(exc).__name__) from exc
     return _normalize_text(converted)
+
+
+def _render_table(converter: Any, table: Any, parent_tags: set[str]) -> str:
+    rows: list[list[str]] = []
+    first_row_is_header = False
+    for row in table.find_all("tr"):
+        if row.find_parent("table") is not table:
+            continue
+        cells = row.find_all(["th", "td"], recursive=False)
+        if not cells:
+            continue
+        if not rows:
+            first_row_is_header = all(cell.name == "th" for cell in cells)
+        rendered_row: list[str] = []
+        for cell in cells:
+            rendered_row.append(_render_table_cell(converter, cell, parent_tags))
+            rendered_row.extend("" for _ in range(_colspan(cell) - 1))
+        rows.append(rendered_row)
+
+    caption = table.find("caption", recursive=False)
+    caption_text = (
+        _render_table_cell(converter, caption, parent_tags)
+        if caption is not None
+        else ""
+    )
+    if not rows:
+        return f"\n\n{caption_text}\n\n" if caption_text else ""
+
+    column_count = max(len(row) for row in rows)
+    for row in rows:
+        row.extend("" for _ in range(column_count - len(row)))
+    if not first_row_is_header:
+        rows.insert(0, [""] * column_count)
+
+    widths = [
+        max(3, *(len(row[index]) for row in rows)) for index in range(column_count)
+    ]
+    lines = [
+        _table_line(rows[0], widths),
+        _table_line(widths, widths, separator=True),
+    ]
+    lines.extend(_table_line(row, widths) for row in rows[1:])
+
+    rendered = (
+        _TABLE_OMITTED
+        if any(len(line) > _TABLE_MAX_WIDTH for line in lines)
+        else "\n".join(lines)
+    )
+    if caption_text:
+        rendered = f"{caption_text}\n\n{rendered}"
+    return f"\n\n{rendered}\n\n"
+
+
+def _render_table_cell(
+    converter: Any,
+    cell: Any,
+    parent_tags: set[str],
+) -> str:
+    clone = copy.copy(cell)
+    clone.name = "span"
+    rendered = converter.process_tag(
+        clone,
+        parent_tags=set(parent_tags) | {"table", "tr", "_inline"},
+    )
+    return _normalize_inline(rendered).replace("|", r"\|")
+
+
+def _colspan(cell: Any) -> int:
+    value = cell.get("colspan")
+    if isinstance(value, str) and value.isdigit():
+        return max(1, min(1000, int(value)))
+    return 1
+
+
+def _table_line(
+    values: list[str] | list[int],
+    widths: list[int],
+    *,
+    separator: bool = False,
+) -> str:
+    if separator:
+        cells = ["-" * width for width in widths]
+    else:
+        cells = [
+            str(value).ljust(width) for value, width in zip(values, widths, strict=True)
+        ]
+    return f"| {' | '.join(cells)} |"
 
 
 def _attribute_string(post: FeedPost, key: str) -> str | None:

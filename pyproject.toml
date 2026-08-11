@@ -9,6 +9,7 @@ description = "Synchronize a Hugo newsletter JSON feed with Listmonk draft campa
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "beautifulsoup4==4.15.0",
   "httpx==0.28.1",
   "markdownify==1.2.3",
 ]
