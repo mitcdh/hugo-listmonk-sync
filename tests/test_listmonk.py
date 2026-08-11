@@ -98,6 +98,32 @@ def test_creation_payload_includes_configured_optional_fields(
     assert payload["tags"] == ["hugo", "news"]
 
 
+def test_html_body_is_email_sanitized_on_create_and_currentness_check(
+    config,
+    make_retrying_http,
+):
+    article = post()
+    article = FeedPost(
+        name=article.name,
+        subject=article.subject,
+        content=(
+            '<p><a href="/report">Report</a></p>'
+            '<button class="code-block__control" hidden>Copy</button>'
+        ),
+        html=article.html,
+        text=article.text,
+        attributes={**article.attributes, "url": "https://blog.example/posts/key/"},
+    )
+    listmonk = client(config, make_retrying_http)
+
+    payload = listmonk.creation_payload(article)
+
+    assert payload["body"] == (
+        '<p><a href="https://blog.example/report">Report</a></p>'
+    )
+    assert listmonk.generated_content_is_current(payload, article)
+
+
 def test_update_payload_preserves_all_non_feed_settings_and_other_attribs(
     config,
     make_retrying_http,

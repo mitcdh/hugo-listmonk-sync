@@ -11,6 +11,7 @@ import httpx
 from hugo_listmonk_sync.config import Config
 from hugo_listmonk_sync.errors import ListmonkError
 from hugo_listmonk_sync.feed import FeedPost
+from hugo_listmonk_sync.htmlbody import HtmlBodyRenderer
 from hugo_listmonk_sync.http import RetryingHttpClient
 from hugo_listmonk_sync.plaintext import PlainTextRenderer
 
@@ -47,6 +48,7 @@ class ListmonkClient:
     ) -> None:
         self._http = http
         self._config = config
+        self._htmlbody = HtmlBodyRenderer(config)
         self._plaintext = PlainTextRenderer(config)
         self._campaigns_url = f"{config.listmonk_base_url}/api/campaigns"
 
@@ -155,7 +157,10 @@ class ListmonkClient:
             "lists": list(self._config.listmonk_list_ids),
             "type": self._config.listmonk_campaign_type,
             "content_type": self._config.listmonk_content_type,
-            "body": post.content,
+            "body": self._htmlbody.render(
+                post,
+                self._config.listmonk_content_type,
+            ),
             "altbody": self._plaintext.render(post, presentation),
             "messenger": self._config.listmonk_messenger,
             "attribs": {
@@ -187,12 +192,17 @@ class ListmonkClient:
         request: dict[str, Any] = {
             "name": post.name,
             "subject": post.subject,
-            "body": post.content,
             "altbody": self._plaintext.render(post, presentation),
         }
         for field in _UPDATE_FIELDS:
             if field in existing:
                 request[field] = copy.deepcopy(existing[field])
+
+        content_type = request.get("content_type")
+        request["body"] = self._htmlbody.render(
+            post,
+            content_type if isinstance(content_type, str) else "",
+        )
 
         lists = request.get("lists")
         if not isinstance(lists, list):
@@ -221,10 +231,14 @@ class ListmonkClient:
     ) -> bool:
         """Return whether every synchronizer-owned field is current."""
         presentation = self._plaintext.resolve_presentation(post)
+        content_type = existing.get("content_type")
         expected = {
             "name": post.name,
             "subject": post.subject,
-            "body": post.content,
+            "body": self._htmlbody.render(
+                post,
+                content_type if isinstance(content_type, str) else "",
+            ),
             "altbody": self._plaintext.render(post, presentation),
         }
         if any(existing.get(key) != value for key, value in expected.items()):

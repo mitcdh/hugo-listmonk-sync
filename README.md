@@ -225,9 +225,11 @@ string. The synchronizer compares timestamp instants, not their string forms,
 and stores the original feed string unchanged. A feed without `lastmod` remains
 valid schema v1 and uses the previous always-update behavior.
 
-The `html` field is the source for the generated alternate body. The `text`
-field is retained only as a fallback when HTML conversion is unavailable or
-fails; neither large body is copied into campaign attributes.
+The selected content field is the source for the campaign body. For HTML and
+rich-text campaigns, the synchronizer derives an e-mail-safe HTML fragment
+from it. The `html` field is also the source for the generated alternate body.
+The `text` field is retained only as a fallback when HTML conversion is
+unavailable or fails; neither large body is copied into campaign attributes.
 
 The complete feed is validated before any Listmonk mutation. Invalid JSON, an
 unsupported schema version, a missing selected field, duplicate campaign
@@ -317,11 +319,17 @@ and tracking pixels are not reproduced.
 This is generated directly by the synchronizer; it does not depend on
 Listmonk's manual UI generator or a send-time conversion step.
 
-The HTML converter preserves headings, paragraphs, lists, blockquotes, tables,
-and readable code blocks. Links use `[label] (destination)` and meaningful
-images use `[Image: alt text] (URL)`; images without alt text are treated as
-decorative. A link whose label is already its URL is emitted once. Embedded
+The plain-text converter preserves headings, paragraphs, lists, blockquotes,
+and readable code blocks. Links use `label: URL`; links already displayed as a
+URL are emitted once. Meaningful images use `Image: alt text — URL`, while
+images without alt text are treated as decorative. Relative article links and
+image destinations are resolved against the canonical post URL. Embedded
 video frames become labelled destination links instead of disappearing.
+
+Tables are rendered as padded pipe tables whose columns match their widest
+cell. If any aligned table line would exceed 80 characters, the table is
+replaced with a note directing the reader to the full article. This avoids
+unreadable wrapping in narrow plain-text mail views.
 
 Web-only code controls, code-line anchors, hidden status text, footnote return
 links, and redundant footnote separators are omitted. Footnote references keep
@@ -342,6 +350,18 @@ then the matching environment default, then omission. The feed keys are
 `headerKicker`, `author`, `address`, `siteName`, and `baseURL`. Resolved values
 are stored in synchronizer-owned `.Campaign.Attribs.newsletter` for the bundled
 HTML template to consume as well.
+
+## E-mail-safe HTML body
+
+HTML and rich-text campaign bodies retain article headings, links, images,
+lists, tables, footnotes, and code. Before a body is sent to Listmonk, relative
+links and image sources are made absolute using the canonical post URL.
+
+Browser-only code controls, hidden status regions, scripts, and article-local
+styles are removed. `<details>` sections are expanded into ordinary visible
+content, and `<iframe>` embeds become labelled links because interactive
+frames are not reliably supported by mail clients. Internal footnote fragment
+links remain in HTML for clients and Listmonk browser views that support them.
 
 ## Listmonk setup
 

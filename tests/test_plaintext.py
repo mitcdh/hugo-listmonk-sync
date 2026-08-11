@@ -68,12 +68,12 @@ def test_renders_structured_plain_text_and_shared_presentation(make_config):
         "Publisher Name · 9 August 2026 · 12 min read"
     )
     assert "Article heading\n---------------" in rendered
-    assert "[full report] (https://example.com/report)" in rendered
+    assert "full report: https://example.com/report" in rendered
     assert "- First item" in rendered
     assert "  - Nested" in rendered
     assert "> A useful quotation." in rendered
     assert "```\nanswer = 42\n```" in rendered
-    assert "[Image: Results chart] (https://example.com/chart.png)" in rendered
+    assert "Image: Results chart — https://example.com/chart.png" in rendered
     assert "divider.png" not in rendered
     assert "tracking" not in rendered
     assert "READ THE FULL POST\nhttps://blog.example/posts/post-key/" in rendered
@@ -116,7 +116,7 @@ def test_post_metadata_overrides_environment_presentation(make_config):
 
 
 def test_conversion_failure_uses_feed_text(monkeypatch, config):
-    def broken_converter(_html):
+    def broken_converter(_html, **_kwargs):
         raise plaintext._HtmlConversionError("broken converter")
 
     monkeypatch.setattr(plaintext, "_convert_html", broken_converter)
@@ -192,7 +192,7 @@ def test_strips_web_controls_and_internal_fragment_navigation():
 
     assert "Claim[5]." in converted
     assert "example.yaml" in converted
-    assert "[Source] (https://example.com/source)" in converted
+    assert "Source: https://example.com/source" in converted
     assert "```\n---\ntitle: Example\n```" in converted
     assert "References\n----------\n\n1. Reference https://example.com/ref" in converted
     assert "Wrap" not in converted
@@ -208,4 +208,47 @@ def test_preserves_iframe_destination_as_plain_text_link():
         '<iframe title="Demonstration" src="https://www.youtube.com/embed/abc"></iframe>'
     )
 
-    assert converted == ("[Video: Demonstration] (https://www.youtube.com/embed/abc)")
+    assert converted == "Video: Demonstration — https://www.youtube.com/embed/abc"
+
+
+def test_resolves_relative_article_links_and_images():
+    converted = plaintext._convert_html(
+        '<p><a href="../../report">Report</a></p>'
+        '<img alt="Chart" src="/images/chart.png">',
+        base_url="https://blog.example/posts/example/",
+    )
+
+    assert "Report: https://blog.example/report" in converted
+    assert "Image: Chart — https://blog.example/images/chart.png" in converted
+
+
+def test_aligns_plain_text_table_columns_to_cell_contents():
+    converted = plaintext._convert_html(
+        "<table><thead><tr><th>Name</th><th>Value</th></tr></thead>"
+        "<tbody><tr><td>Short</td><td>Longer value</td></tr>"
+        "<tr><td>A</td><td>2</td></tr></tbody></table>"
+    )
+
+    assert converted == (
+        "| Name  | Value        |\n"
+        "| ----- | ------------ |\n"
+        "| Short | Longer value |\n"
+        "| A     | 2            |"
+    )
+    assert all(len(line) <= 80 for line in converted.splitlines())
+
+
+def test_omits_table_when_aligned_line_would_exceed_80_characters():
+    long_value = "x" * 70
+    converted = plaintext._convert_html(
+        "<p>Before.</p><table><tr><th>Key</th><th>Value</th></tr>"
+        f"<tr><td>example</td><td>{long_value}</td></tr></table>"
+        "<p>After.</p>"
+    )
+
+    assert converted == (
+        "Before.\n\n"
+        "Table omitted: it exceeds 80 characters per line. See the full article.\n\n"
+        "After."
+    )
+    assert long_value not in converted
