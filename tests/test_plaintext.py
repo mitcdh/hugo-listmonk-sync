@@ -224,17 +224,20 @@ def test_resolves_relative_article_links_and_images():
 
 def test_aligns_plain_text_table_columns_to_cell_contents():
     converted = plaintext._convert_html(
+        "<p><strong>Example table</strong></p>"
         "<table><thead><tr><th>Name</th><th>Value</th></tr></thead>"
         "<tbody><tr><td>Short</td><td>Longer value</td></tr>"
         "<tr><td>A</td><td>2</td></tr></tbody></table>"
     )
 
     assert converted == (
+        "Example table\n\n"
         "| Name  | Value        |\n"
         "| ----- | ------------ |\n"
         "| Short | Longer value |\n"
         "| A     | 2            |"
     )
+    assert "**" not in converted
     assert all(len(line) <= 80 for line in converted.splitlines())
 
 

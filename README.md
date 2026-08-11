@@ -331,6 +331,10 @@ cell. If any aligned table line would exceed 80 characters, the table is
 replaced with a note directing the reader to the full article. This avoids
 unreadable wrapping in narrow plain-text mail views.
 
+Plain-text emphasis is emitted without Markdown `*` or `**` markers. This
+keeps captions such as table titles readable in clients and previews that do
+not interpret Markdown.
+
 Web-only code controls, code-line anchors, hidden status text, footnote return
 links, and redundant footnote separators are omitted. Footnote references keep
 their labels, such as `[5]`, while the references remain an ordered list with
@@ -357,11 +361,18 @@ HTML and rich-text campaign bodies retain article headings, links, images,
 lists, tables, footnotes, and code. Before a body is sent to Listmonk, relative
 links and image sources are made absolute using the canonical post URL.
 
+Article tables receive inline, content-sized layout with padded, top-aligned
+cells so they remain compact in Listmonk previews and mail clients. The bundled
+HTML template applies the same table layout.
+
 Browser-only code controls, hidden status regions, scripts, and article-local
 styles are removed. `<details>` sections are expanded into ordinary visible
 content, and `<iframe>` embeds become labelled links because interactive
 frames are not reliably supported by mail clients. Internal footnote fragment
 links remain in HTML for clients and Listmonk browser views that support them.
+Literal `{{` and `}}` decoded from article HTML are emitted through safe Go
+template actions, preventing displayed template examples from being compiled
+as Listmonk expressions.
 
 ## Listmonk setup
 

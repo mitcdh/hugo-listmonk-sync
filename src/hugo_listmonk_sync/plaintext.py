@@ -11,6 +11,7 @@ from typing import Any
 from hugo_listmonk_sync.config import Config
 from hugo_listmonk_sync.errors import PlainTextError
 from hugo_listmonk_sync.feed import FeedPost
+from hugo_listmonk_sync.template_safety import protect_template_delimiters
 from hugo_listmonk_sync.timestamps import parse_aware_iso8601
 from hugo_listmonk_sync.urls import resolve_content_url
 
@@ -21,8 +22,6 @@ _TABLE_MAX_WIDTH = 80
 _TABLE_OMITTED = (
     "Table omitted: it exceeds 80 characters per line. See the full article."
 )
-_OPEN_TEMPLATE_LITERAL = r'{{ printf "\x7b\x7b" }}'
-_CLOSE_TEMPLATE_LITERAL = r'{{ printf "\x7d\x7d" }}'
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,11 +85,11 @@ class PlainTextRenderer:
         post_url = _attribute_string(post, "url")
 
         header = [
-            _protect_template_delimiters(resolved.header_kicker),
+            protect_template_delimiters(resolved.header_kicker),
             _heading(title),
         ]
         if description is not None:
-            header.append(_protect_template_delimiters(description))
+            header.append(protect_template_delimiters(description))
 
         byline = _byline(post, resolved)
         if byline:
@@ -99,16 +98,16 @@ class PlainTextRenderer:
         sections = [*header, _DIVIDER, self._article_body(post)]
         if post_url is not None:
             sections.append(
-                f"READ THE FULL POST\n{_protect_template_delimiters(post_url)}"
+                f"READ THE FULL POST\n{protect_template_delimiters(post_url)}"
             )
 
         footer: list[str] = []
         if resolved.author is not None:
             footer.append(
-                f"Published by {_protect_template_delimiters(resolved.author)}"
+                f"Published by {protect_template_delimiters(resolved.author)}"
             )
         if resolved.address is not None:
-            footer.append(_protect_template_delimiters(resolved.address))
+            footer.append(protect_template_delimiters(resolved.address))
         footer.extend(
             [
                 "Unsubscribe: {{ UnsubscribeURL }}",
@@ -122,8 +121,8 @@ class PlainTextRenderer:
                 else "Visit the blog"
             )
             footer.append(
-                f"{_protect_template_delimiters(site_label)}: "
-                f"{_protect_template_delimiters(resolved.base_url)}"
+                f"{protect_template_delimiters(site_label)}: "
+                f"{protect_template_delimiters(resolved.base_url)}"
             )
 
         sections.extend([_DIVIDER, "\n".join(footer)])
@@ -145,14 +144,14 @@ class PlainTextRenderer:
                 )
             else:
                 if converted:
-                    return _protect_template_delimiters(converted)
+                    return protect_template_delimiters(converted)
                 logger.warning(
                     "HTML conversion for campaign %r produced no text; using feed text",
                     post.name,
                 )
 
         if post.text is not None and post.text.strip():
-            return _protect_template_delimiters(_normalize_text(post.text))
+            return protect_template_delimiters(_normalize_text(post.text))
         raise PlainTextError(
             f"Campaign {post.name!r} has no usable HTML conversion or text fallback"
         )
@@ -213,6 +212,27 @@ def _convert_html(html: str, *, base_url: str | None = None) -> str:  # noqa: C9
         ) -> str:
             del el, text, parent_tags
             return ""
+
+        def convert_b(
+            self,
+            el: Any,
+            text: str,
+            parent_tags: set[str],
+        ) -> str:
+            del el, parent_tags
+            return text
+
+        def convert_em(
+            self,
+            el: Any,
+            text: str,
+            parent_tags: set[str],
+        ) -> str:
+            del el, parent_tags
+            return text
+
+        convert_i = convert_em
+        convert_strong = convert_b
 
         def convert_span(
             self,
@@ -414,7 +434,7 @@ def _is_video_embed(source: str) -> bool:
 def _byline(post: FeedPost, presentation: NewsletterPresentation) -> str:
     values: list[str] = []
     if presentation.author is not None:
-        values.append(_protect_template_delimiters(presentation.author))
+        values.append(protect_template_delimiters(presentation.author))
 
     raw_date = _attribute_string(post, "date")
     if raw_date is not None:
@@ -430,12 +450,12 @@ def _byline(post: FeedPost, presentation: NewsletterPresentation) -> str:
 
     reading_time = _attribute_string(post, "readingTime")
     if reading_time is not None:
-        values.append(_protect_template_delimiters(reading_time))
+        values.append(protect_template_delimiters(reading_time))
     return " · ".join(values)
 
 
 def _heading(title: str) -> str:
-    return f"{_protect_template_delimiters(title)}\n{'=' * max(3, len(title))}"
+    return f"{protect_template_delimiters(title)}\n{'=' * max(3, len(title))}"
 
 
 def _without_trailing_slash(value: str | None) -> str | None:
@@ -458,19 +478,3 @@ def _normalize_text(value: str) -> str:
     normalized = re.sub(r"[ \t]+\n", "\n", normalized)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
     return normalized.strip()
-
-
-def _protect_template_delimiters(value: str) -> str:
-    protected: list[str] = []
-    index = 0
-    while index < len(value):
-        if value.startswith("{{", index):
-            protected.append(_OPEN_TEMPLATE_LITERAL)
-            index += 2
-        elif value.startswith("}}", index):
-            protected.append(_CLOSE_TEMPLATE_LITERAL)
-            index += 2
-        else:
-            protected.append(value[index])
-            index += 1
-    return "".join(protected)
