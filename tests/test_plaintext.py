@@ -62,10 +62,15 @@ def test_renders_structured_plain_text_and_shared_presentation(make_config):
         "baseURL": "https://blog.example",
     }
     assert rendered.startswith(
-        "NEW BLOG POST\n\n"
-        "Post title\n==========\n\n"
-        "Post description.\n\n"
-        "Publisher Name · 9 August 2026 · 12 min read"
+        "{{ .Campaign.Attribs.newsletter.headerKicker | Safe }}\n\n"
+        "{{ with .Campaign.Attribs.post.title }}{{ . | Safe }}"
+        "{{ else }}{{ $.Campaign.Subject | Safe }}{{ end }}\n"
+        "==========\n\n"
+        "{{ .Campaign.Attribs.post.description | Safe }}\n\n"
+        "{{ .Campaign.Attribs.newsletter.author | Safe }} · "
+        '{{ .Campaign.Attribs.post.date | toDate "2006-01-02T15:04:05Z07:00" '
+        '| date "2 January 2006" }} · '
+        "{{ .Campaign.Attribs.post.readingTime | Safe }}"
     )
     assert "Article heading\n---------------" in rendered
     assert "full report: https://example.com/report" in rendered
@@ -76,11 +81,19 @@ def test_renders_structured_plain_text_and_shared_presentation(make_config):
     assert "Image: Results chart — https://example.com/chart.png" in rendered
     assert "divider.png" not in rendered
     assert "tracking" not in rendered
-    assert "READ THE FULL POST\nhttps://blog.example/posts/post-key/" in rendered
-    assert "Published by Publisher Name\nPostal address" in rendered
-    assert "Unsubscribe: {{ UnsubscribeURL }}" in rendered
-    assert "View online: {{ MessageURL }}" in rendered
-    assert "Visit Example Blog: https://blog.example" in rendered
+    assert "READ THE FULL POST\n{{ .Campaign.Attribs.post.url | Safe }}" in rendered
+    assert (
+        "Published by {{ .Campaign.Attribs.newsletter.author | Safe }}\n"
+        "{{ .Campaign.Attribs.newsletter.address | Safe }}"
+    ) in rendered
+    assert "Unsubscribe: {{ UnsubscribeURL . | Safe }}" in rendered
+    assert "View online: {{ MessageURL . | Safe }}" in rendered
+    assert (
+        "Visit {{ .Campaign.Attribs.newsletter.siteName | Safe }}: "
+        "{{ .Campaign.Attribs.newsletter.baseURL | Safe }}"
+    ) in rendered
+    assert "Publisher Name" not in rendered
+    assert "Post description." not in rendered
 
 
 def test_post_metadata_overrides_environment_presentation(make_config):
@@ -150,8 +163,8 @@ def test_dynamic_double_braces_are_safe_but_listmonk_expressions_remain(config):
     assert "{{ title }}" not in rendered
     assert '{{ printf "\\x7b\\x7b" }}' in rendered
     assert '{{ printf "\\x7d\\x7d" }}' in rendered
-    assert rendered.count("{{ UnsubscribeURL }}") == 1
-    assert rendered.count("{{ MessageURL }}") == 1
+    assert rendered.count("{{ UnsubscribeURL . | Safe }}") == 1
+    assert rendered.count("{{ MessageURL . | Safe }}") == 1
 
 
 def test_malformed_optional_publication_date_is_omitted(config):
@@ -160,7 +173,7 @@ def test_malformed_optional_publication_date_is_omitted(config):
     rendered = PlainTextRenderer(config).render(post)
 
     assert "not-a-date" not in rendered
-    assert "12 min read" in rendered
+    assert "{{ .Campaign.Attribs.post.readingTime | Safe }}" in rendered
 
 
 def test_strips_web_controls_and_internal_fragment_navigation():
@@ -232,17 +245,18 @@ def test_aligns_plain_text_table_columns_to_cell_contents():
 
     assert converted == (
         "Example table\n\n"
-        "| Name  | Value        |\n"
-        "| ----- | ------------ |\n"
-        "| Short | Longer value |\n"
-        "| A     | 2            |"
+        "Name   Value\n"
+        "-----  ------------\n"
+        "Short  Longer value\n"
+        "A      2"
     )
+    assert "|" not in converted
     assert "**" not in converted
     assert all(len(line) <= 80 for line in converted.splitlines())
 
 
 def test_omits_table_when_aligned_line_would_exceed_80_characters():
-    long_value = "x" * 70
+    long_value = "x" * 72
     converted = plaintext._convert_html(
         "<p>Before.</p><table><tr><th>Key</th><th>Value</th></tr>"
         f"<tr><td>example</td><td>{long_value}</td></tr></table>"

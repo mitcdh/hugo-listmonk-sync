@@ -25,6 +25,21 @@ def post() -> FeedPost:
     )
 
 
+def expected_altbody() -> str:
+    return (
+        "{{ .Campaign.Attribs.newsletter.headerKicker | Safe }}\n\n"
+        "{{ with .Campaign.Attribs.post.title }}{{ . | Safe }}"
+        "{{ else }}{{ $.Campaign.Subject | Safe }}{{ end }}\n"
+        "==========\n\n"
+        "{{ .Campaign.Attribs.post.readingTime | Safe }}\n\n"
+        "----------------------------------------------------------------\n\n"
+        "Post body\n\n"
+        "----------------------------------------------------------------\n\n"
+        "Unsubscribe: {{ UnsubscribeURL . | Safe }}\n"
+        "View online: {{ MessageURL . | Safe }}\n"
+    )
+
+
 def client(config, make_retrying_http, *, max_retries=3, sleep=None):
     auth = httpx.BasicAuth(
         config.listmonk_api_username,
@@ -54,16 +69,7 @@ def test_creation_payload_uses_configured_defaults_and_omits_unset(
         "type": "regular",
         "content_type": "html",
         "body": "<p>Post body</p>",
-        "altbody": (
-            "NEW BLOG POST\n\n"
-            "Post title\n==========\n\n"
-            "5 min read\n\n"
-            "----------------------------------------------------------------\n\n"
-            "Post body\n\n"
-            "----------------------------------------------------------------\n\n"
-            "Unsubscribe: {{ UnsubscribeURL }}\n"
-            "View online: {{ MessageURL }}\n"
-        ),
+        "altbody": expected_altbody(),
         "messenger": "email",
         "attribs": {
             "post": {
@@ -165,16 +171,7 @@ def test_update_payload_preserves_all_non_feed_settings_and_other_attribs(
         "type": "optin",
         "content_type": "markdown",
         "body_source": {"blocks": ["unchanged"]},
-        "altbody": (
-            "NEW BLOG POST\n\n"
-            "Post title\n==========\n\n"
-            "5 min read\n\n"
-            "----------------------------------------------------------------\n\n"
-            "Post body\n\n"
-            "----------------------------------------------------------------\n\n"
-            "Unsubscribe: {{ UnsubscribeURL }}\n"
-            "View online: {{ MessageURL }}\n"
-        ),
+        "altbody": expected_altbody(),
         "send_at": "2026-08-01T00:00:00Z",
         "messenger": "custom",
         "template_id": 13,

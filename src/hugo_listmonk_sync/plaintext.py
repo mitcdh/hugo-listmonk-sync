@@ -22,6 +22,22 @@ _TABLE_MAX_WIDTH = 80
 _TABLE_OMITTED = (
     "Table omitted: it exceeds 80 characters per line. See the full article."
 )
+_HEADER_KICKER_TEMPLATE = "{{ .Campaign.Attribs.newsletter.headerKicker | Safe }}"
+_TITLE_TEMPLATE = (
+    "{{ with .Campaign.Attribs.post.title }}{{ . | Safe }}"
+    "{{ else }}{{ $.Campaign.Subject | Safe }}{{ end }}"
+)
+_DESCRIPTION_TEMPLATE = "{{ .Campaign.Attribs.post.description | Safe }}"
+_AUTHOR_TEMPLATE = "{{ .Campaign.Attribs.newsletter.author | Safe }}"
+_ADDRESS_TEMPLATE = "{{ .Campaign.Attribs.newsletter.address | Safe }}"
+_SITE_NAME_TEMPLATE = "{{ .Campaign.Attribs.newsletter.siteName | Safe }}"
+_BASE_URL_TEMPLATE = "{{ .Campaign.Attribs.newsletter.baseURL | Safe }}"
+_POST_URL_TEMPLATE = "{{ .Campaign.Attribs.post.url | Safe }}"
+_READING_TIME_TEMPLATE = "{{ .Campaign.Attribs.post.readingTime | Safe }}"
+_DATE_TEMPLATE = (
+    '{{ .Campaign.Attribs.post.date | toDate "2006-01-02T15:04:05Z07:00" '
+    '| date "2 January 2006" }}'
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,11 +101,11 @@ class PlainTextRenderer:
         post_url = _attribute_string(post, "url")
 
         header = [
-            protect_template_delimiters(resolved.header_kicker),
+            _HEADER_KICKER_TEMPLATE,
             _heading(title),
         ]
         if description is not None:
-            header.append(protect_template_delimiters(description))
+            header.append(_DESCRIPTION_TEMPLATE)
 
         byline = _byline(post, resolved)
         if byline:
@@ -97,33 +113,26 @@ class PlainTextRenderer:
 
         sections = [*header, _DIVIDER, self._article_body(post)]
         if post_url is not None:
-            sections.append(
-                f"READ THE FULL POST\n{protect_template_delimiters(post_url)}"
-            )
+            sections.append(f"READ THE FULL POST\n{_POST_URL_TEMPLATE}")
 
         footer: list[str] = []
         if resolved.author is not None:
-            footer.append(
-                f"Published by {protect_template_delimiters(resolved.author)}"
-            )
+            footer.append(f"Published by {_AUTHOR_TEMPLATE}")
         if resolved.address is not None:
-            footer.append(protect_template_delimiters(resolved.address))
+            footer.append(_ADDRESS_TEMPLATE)
         footer.extend(
             [
-                "Unsubscribe: {{ UnsubscribeURL }}",
-                "View online: {{ MessageURL }}",
+                "Unsubscribe: {{ UnsubscribeURL . | Safe }}",
+                "View online: {{ MessageURL . | Safe }}",
             ]
         )
         if resolved.base_url is not None:
             site_label = (
-                f"Visit {resolved.site_name}"
+                f"Visit {_SITE_NAME_TEMPLATE}"
                 if resolved.site_name is not None
                 else "Visit the blog"
             )
-            footer.append(
-                f"{protect_template_delimiters(site_label)}: "
-                f"{protect_template_delimiters(resolved.base_url)}"
-            )
+            footer.append(f"{site_label}: {_BASE_URL_TEMPLATE}")
 
         sections.extend([_DIVIDER, "\n".join(footer)])
         return "\n\n".join(section for section in sections if section).strip() + "\n"
@@ -345,17 +354,20 @@ def _render_table(converter: Any, table: Any, parent_tags: set[str]) -> str:
     column_count = max(len(row) for row in rows)
     for row in rows:
         row.extend("" for _ in range(column_count - len(row)))
-    if not first_row_is_header:
-        rows.insert(0, [""] * column_count)
-
     widths = [
         max(3, *(len(row[index]) for row in rows)) for index in range(column_count)
     ]
-    lines = [
-        _table_line(rows[0], widths),
-        _table_line(widths, widths, separator=True),
-    ]
-    lines.extend(_table_line(row, widths) for row in rows[1:])
+    lines: list[str] = []
+    if first_row_is_header:
+        lines.extend(
+            [
+                _table_line(rows[0], widths),
+                _table_line(widths, widths, separator=True),
+            ]
+        )
+        lines.extend(_table_line(row, widths) for row in rows[1:])
+    else:
+        lines.extend(_table_line(row, widths) for row in rows)
 
     rendered = (
         _TABLE_OMITTED
@@ -378,7 +390,7 @@ def _render_table_cell(
         clone,
         parent_tags=set(parent_tags) | {"table", "tr", "_inline"},
     )
-    return _normalize_inline(rendered).replace("|", r"\|")
+    return _normalize_inline(rendered)
 
 
 def _colspan(cell: Any) -> int:
@@ -400,7 +412,7 @@ def _table_line(
         cells = [
             str(value).ljust(width) for value, width in zip(values, widths, strict=True)
         ]
-    return f"| {' | '.join(cells)} |"
+    return "  ".join(cells).rstrip()
 
 
 def _attribute_string(post: FeedPost, key: str) -> str | None:
@@ -434,28 +446,28 @@ def _is_video_embed(source: str) -> bool:
 def _byline(post: FeedPost, presentation: NewsletterPresentation) -> str:
     values: list[str] = []
     if presentation.author is not None:
-        values.append(protect_template_delimiters(presentation.author))
+        values.append(_AUTHOR_TEMPLATE)
 
     raw_date = _attribute_string(post, "date")
     if raw_date is not None:
         try:
-            parsed_date = parse_aware_iso8601(raw_date)
+            parse_aware_iso8601(raw_date)
         except ValueError:
             logger.warning(
                 "Campaign %r has malformed optional publication date; omitting it",
                 post.name,
             )
         else:
-            values.append(f"{parsed_date.day} {parsed_date:%B %Y}")
+            values.append(_DATE_TEMPLATE)
 
     reading_time = _attribute_string(post, "readingTime")
     if reading_time is not None:
-        values.append(protect_template_delimiters(reading_time))
+        values.append(_READING_TIME_TEMPLATE)
     return " · ".join(values)
 
 
 def _heading(title: str) -> str:
-    return f"{protect_template_delimiters(title)}\n{'=' * max(3, len(title))}"
+    return f"{_TITLE_TEMPLATE}\n{'=' * max(3, len(title))}"
 
 
 def _without_trailing_slash(value: str | None) -> str | None:

@@ -127,10 +127,13 @@ def test_full_http_reconciliation_cycle(config, make_retrying_http):
     assert created["lists"] == [4, 9]
     assert created["content_type"] == "html"
     assert created["body"] == "<p>New</p>"
-    assert "NEW BLOG POST" in created["altbody"]
-    assert "New post\n========" in created["altbody"]
+    assert (
+        "{{ .Campaign.Attribs.newsletter.headerKicker | Safe }}" in created["altbody"]
+    )
+    assert "{{ with .Campaign.Attribs.post.title }}" in created["altbody"]
+    assert "\n========\n" in created["altbody"]
     assert "New\n\nREAD THE FULL POST" in created["altbody"]
-    assert "Unsubscribe: {{ UnsubscribeURL }}" in created["altbody"]
+    assert "Unsubscribe: {{ UnsubscribeURL . | Safe }}" in created["altbody"]
     assert created["attribs"]["post"]["readingTime"] == "3 min read"
     assert created["attribs"]["post"]["lastmod"] == ("2026-08-09T07:34:55Z")
     assert created["attribs"]["newsletter"] == {"headerKicker": "NEW BLOG POST"}
